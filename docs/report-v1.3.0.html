@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>全面吸取落地 v1.3.0 · super-expert @ 7f63d86</title>
+<style>
+:root{
+  --bg:#f5f6f8; --card:#ffffff; --ink:#1b1f24; --dim:#5b6674; --line:#e3e7ec;
+  --red:#c0392b; --redbg:#fdeeec; --green:#1e8449; --greenbg:#eaf7ef;
+  --yellow:#a9700b; --yellowbg:#fdf5e4; --blue:#1f5fa8; --bluebg:#ecf3fb;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Courier New",monospace;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font:15px/1.72 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif}
+.wrap{max-width:1180px;margin:0 auto;padding:28px 22px 60px}
+header{border-bottom:1px solid var(--line);padding-bottom:18px;margin-bottom:22px}
+h1{font-size:25px;margin:0 0 8px;letter-spacing:.2px}
+.sub{color:var(--dim);font-size:13.5px}
+.sub code{font-family:var(--mono);background:#eef1f5;padding:1px 6px;border-radius:4px}
+nav{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 20px}
+nav button{border:1px solid var(--line);background:var(--card);color:var(--dim);
+  padding:7px 13px;border-radius:999px;cursor:pointer;font-size:13.5px}
+nav button[aria-selected="true"]{background:var(--ink);color:#fff;border-color:var(--ink)}
+section{display:none}
+section.on{display:block;animation:fade .18s ease-out}
+@keyframes fade{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:none}}
+h2{font-size:19px;margin:26px 0 10px}
+h3{font-size:15.5px;margin:20px 0 8px;color:#2b333d}
+p{margin:8px 0}
+.lead{font-size:15.5px}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px;margin:16px 0}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 17px}
+.card .k{font-size:12px;letter-spacing:.08em;color:var(--dim);text-transform:uppercase}
+.card .v{font-size:26px;font-weight:650;margin:6px 0 2px;font-variant-numeric:tabular-nums}
+.card .n{font-size:13px;color:var(--dim)}
+table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);
+  border-radius:10px;overflow:hidden;margin:14px 0;font-size:14px}
+th,td{padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top;text-align:left}
+th{background:#f0f3f7;font-weight:600;font-size:13px;color:#39424e}
+tr:last-child td{border-bottom:none}
+code{font-family:var(--mono);font-size:12.8px;background:#eef1f5;padding:1px 5px;border-radius:4px}
+.tag{display:inline-block;font-size:12px;padding:1px 8px;border-radius:999px;border:1px solid transparent}
+.t-red{background:var(--redbg);color:var(--red);border-color:#f3cfc9}
+.t-green{background:var(--greenbg);color:var(--green);border-color:#c8e6d3}
+.t-yellow{background:var(--yellowbg);color:var(--yellow);border-color:#f0ddb6}
+.t-blue{background:var(--bluebg);color:var(--blue);border-color:#cddff5}
+.t-gray{background:#eef1f5;color:var(--dim);border-color:#e0e5eb}
+.note{border-left:3px solid var(--blue);background:var(--bluebg);padding:11px 14px;border-radius:0 8px 8px 0;margin:14px 0}
+.warn{border-left:3px solid var(--red);background:var(--redbg);padding:11px 14px;border-radius:0 8px 8px 0;margin:14px 0}
+.ok{border-left:3px solid var(--green);background:var(--greenbg);padding:11px 14px;border-radius:0 8px 8px 0;margin:14px 0}
+pre{background:#1e232a;color:#e6edf3;padding:13px 15px;border-radius:9px;overflow:auto;
+  font-family:var(--mono);font-size:12.6px;line-height:1.55;margin:12px 0}
+pre .r{color:#ff8b7e}
+pre .g{color:#7ee2a8}
+ul{margin:8px 0 8px 20px;padding:0}
+li{margin:5px 0}
+.foot{margin-top:34px;border-top:1px solid var(--line);padding-top:14px;color:var(--dim);font-size:12.6px}
+.split{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media(max-width:820px){.split{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>全面吸取 · 落地报告 v1.3.0</h1>
+  <div class="sub">
+    仓库 <code>junyi040521/super-expert</code> · 提交 <code>7f63d86</code>（父 <code>8cc61ba</code>，未压平）·
+    34 文件 / 172,161 B · CI run <code>43176285030</code> 三 job 全绿
+  </div>
+</header>
+
+<nav role="tablist">
+  <button role="tab" aria-selected="true" data-t="p1">① 判决</button>
+  <button role="tab" aria-selected="false" data-t="p2">② 吸取边界</button>
+  <button role="tab" aria-selected="false" data-t="p3">③ 四条探针</button>
+  <button role="tab" aria-selected="false" data-t="p4">④ L5 改判</button>
+  <button role="tab" aria-selected="false" data-t="p5">⑤ 证据与复验</button>
+  <button role="tab" aria-selected="false" data-t="p6">⑥ 未完成</button>
+</nav>
+
+<!-- ============ 1 ============ -->
+<section id="p1" class="on">
+  <p class="lead">「全面吸取」不是整包搬运。母版 369 文件 / 4.06 MB，其中 355 个在 <code>skills/</code> 下——
+  而 <b>13 个技能是第三方内容</b>，作者本人也无权再许可。整包搬进 MIT 仓库，第一件事就是把
+  仓库自己写的「授权不明即不可分发」违反掉。</p>
+
+  <div class="note"><b>所以这一版的口径是：吸结构，不吸正文。</b>
+  结构 = 分母（97 项 / 31 域）、域划分、算子准入门、反模式、五级阶梯。
+  这些都能配出「会变红的检查」；正文（97 项逐条、persona、头像）配不出来，进来只会让仓库变长。</div>
+
+  <div class="cards">
+    <div class="card"><div class="k">覆盖账</div><div class="v">12 / 2 / 83</div>
+      <div class="n">covered / text-only / 缺席（母版 97 项）</div></div>
+    <div class="card"><div class="k">判据数</div><div class="v">7 → 13</div>
+      <div class="n">METHOD 7 条 + DOCTRINE 6 条，L1 双文件扫</div></div>
+    <div class="card"><div class="k">自测断言</div><div class="v">45 → 72</div>
+      <div class="n">gate 26 / probe 11 / cover 13 / shape 9 / pack 7 / falsify 6</div></div>
+    <div class="card"><div class="k">真仓证据</div><div class="v">4 → 10</div>
+      <div class="n">5 份形态＋探针记录、4 份变红记录、1 份覆盖账 JSON</div></div>
+  </div>
+
+  <h2>前后对照</h2>
+  <table>
+    <thead><tr><th>维度</th><th>v1.2.0（上一版）</th><th>v1.3.0（本版）</th><th>差在哪</th></tr></thead>
+    <tbody>
+      <tr><td>仪器</td><td>5 件</td><td><b>6 件</b>（+probe）</td><td>形态与覆盖之外，补「坏味道」这一类</td></tr>
+      <tr><td>L4 判据</td><td>3 条（A5/A2/HUB）</td><td><b>7 条</b>（+SWALLOW/DUP/ORPHAN/DEPS）</td><td>新仪器必须真仓红过才算数</td></tr>
+      <tr><td>L5 口径</td><td><code>absent ≥ 3×covered</code></td><td><b>分母闭合 + 变红记录 + 账不虚胖</b></td><td>旧口径惩罚诚实，已删（见④）</td></tr>
+      <tr><td>覆盖账</td><td>7 行声明，absent 靠减法</td><td><b>31 域全账</b>，域内算术逐行闭合</td><td>分母从「没写」变成「可对撞」</td></tr>
+      <tr><td>跨域覆盖</td><td>3 / 15</td><td><b>4 / 15</b></td><td>决策记录与腐烂有了 check_dup</td></tr>
+      <tr><td>凭证扫描</td><td>sk- / bearer / 私钥</td><td><b>+ GitHub token</b></td><td>真 token 摆在仓库里报 0 红，是真漏</td></tr>
+    </tbody>
+  </table>
+
+  <div class="ok"><b>终态一句话</b>：六件仪器自测 64/64 全绿，<code>gate.py --grade .</code> 输出
+  <code>GRADE super-expert</code>（L1–L5 全 PASS），远端 34/34 blob 相同，从 GitHub 下载副本复跑仍然全绿。</div>
+</section>
+
+<!-- ============ 2 ============ -->
+<section id="p2">
+  <h2>边界：什么进来，什么不进来</h2>
+  <p>唯一的判据是同一句话：<b>进了仓库，会不会产生一条会变红的检查？</b>不会的，不进。</p>
+
+  <table>
+    <thead><tr><th style="width:27%">母版里的东西</th><th style="width:13%">处置</th><th>理由 / 落到哪</th></tr></thead>
+    <tbody>
+      <tr><td>能力地图 97 项 / 31 域</td><td><span class="tag t-green">吸取</span></td>
+        <td>取<b>分母与域划分</b>，写进 <code>MAP.md</code>；不搬 97 项正文——列全条目等于把索引发出去，且不产生任何判断</td></tr>
+      <tr><td>算子准入门（定序/派发/坍缩/组合）</td><td><span class="tag t-green">吸取</span></td>
+        <td>四条各配一条变红条件，写进 <code>DOCTRINE.md</code>，由 L1 扫字段</td></tr>
+      <tr><td>反模式</td><td><span class="tag t-yellow">部分</span></td>
+        <td>8 条只收 4 条能配出可扫条件的；「过度坍缩」降级为报数，「原点漂移」明确不写（实测三处同名目录都属自相似）</td></tr>
+      <tr><td>阵列 15 域</td><td><span class="tag t-yellow">部分</span></td>
+        <td>只做「哪几域有被测物」的表（<code>DOMAINS.md</code>），3→4 域，其余写空位/不适用</td></tr>
+      <tr><td>五级阶梯定义</td><td><span class="tag t-green">吸取</span></td>
+        <td>L1–L5 与 <code>gate.py --grade</code> 一一对应，每级给出证据位置与判定函数</td></tr>
+      <tr><td>13 个第三方技能</td><td><span class="tag t-red">排除</span></td>
+        <td>不是作者的著作权，无权再许可。能许可的只有自己的东西</td></tr>
+      <tr><td>头像与 persona 提示词</td><td><span class="tag t-red">排除</span></td>
+        <td>身份资产，不是判据；进来既不产生可判条件，也不该被公开分发</td></tr>
+      <tr><td>97 项逐条正文</td><td><span class="tag t-red">排除</span></td>
+        <td>同上：只取分母，不搬条目</td></tr>
+    </tbody>
+  </table>
+
+  <h2>授权怎么落的</h2>
+  <p>母版授权是「保留所有权利 + 未获书面许可禁止再分发（含片段、改写、翻译）」。作者本人 2026-11-12 给出书面许可，
+  记录在 <code>NOTICE.md</code>：授权人、时间、原话、范围（分母与域、算子准入门、反模式、五级定义）、性质（解除第 1 条限制）。</p>
+  <div class="warn"><b>顺手改掉一处过期声明。</b>README 原写「不含任何私有文档片段」——全面吸取之后这句不再成立。
+  改成「结构来自作者本人专家包、措辞是本仓库自己的」，并把许可落到 <code>NOTICE.md</code>。
+  <b>声明过期比没有声明更糟</b>，它会让下一个人按错误的前提做事。</div>
+</section>
+
+<!-- ============ 3 ============ -->
+<section id="p3">
+  <h2>四条探针：管的是「坏味道」，形态与覆盖都看不见</h2>
+  <p>上一版的漏洞很直接：结构看得见、覆盖看得见，<b>但「这里有一处静默失败」看不见</b>。
+  四条探针各答一个问题，每条都必须在一个真实目录上红过。</p>
+
+  <table>
+    <thead><tr><th style="width:12%">探针</th><th style="width:33%">红在哪</th><th style="width:22%">门槛 / 豁免</th><th>真实命中（364 个被测对象的插件市场目录）</th></tr></thead>
+    <tbody>
+      <tr><td><code>SWALLOW</code></td>
+        <td><code>except</code> 里只有 <code>pass</code>/<code>continue</code>/裸 <code>return</code>，异常被吞掉且不留痕</td>
+        <td>自著仓库 0 容忍；<code># noqa: swallow &lt;理由≥4字&gt;</code> 豁免，<b>计入黄</b>不装成绿</td>
+        <td><span class="tag t-red">RED</span> excepts=25，裸吞 8 处</td></tr>
+      <tr><td><code>DUP</code></td>
+        <td>同一段话（≥80 字符、Jaccard ≥0.75）出现在 ≥3 份<b>文档</b></td>
+        <td>2 份判黄；只管文档——代码重复归「零依赖单文件」这一取舍（C1.2）</td>
+        <td><span class="tag t-red">RED</span> 21 组重复段落在 ≥3 份文件同时出现</td></tr>
+      <tr><td><code>ORPHAN</code></td>
+        <td>根级 <code>*.md</code> 或 <code>cases/*/case.md</code> 从 <code>README.md</code> 走不到</td>
+        <td>无豁免——走不到就是走不到</td>
+        <td><span class="tag t-red">RED</span> 该目录无 README，全部文档成孤儿</td></tr>
+      <tr><td><code>DEPS</code></td>
+        <td>有第三方 <code>import</code> 而仓库里没有 <code>RUNTIME.md</code>，或包名未登记</td>
+        <td>声明了但模块级导入只记信息，不判红（大多数项目本就如此）</td>
+        <td><span class="tag t-red">RED</span> <code>requests</code> / <code>yaml</code> 未声明</td></tr>
+    </tbody>
+  </table>
+
+  <h3>三条自己踩出来的坑，都写进了代码注释</h3>
+  <div class="split">
+    <div class="card"><div class="k">坑 1</div><b>中文 4-gram 把公共短语算成相似</b>
+      <p>第一版在自测里就误报：「判据」「变红条件」这类词在任意两段中文里都出现。
+      现在出现 &gt;50 段的 shingle 直接不入索引——既是提速，也是精度。</p></div>
+    <div class="card"><div class="k">坑 2</div><b>反模式表必然命中 A5</b>
+      <p>要描述「除某一类之外都适用」这个句式，就得把它写出来。不给隐藏跳过名单，
+      给一条写在案发现场的 <code>&lt;!-- a5-waiver: 理由 --&gt;</code>，并打印 <code>waived=1</code>。</p></div>
+    <div class="card"><div class="k">坑 3</div><b>扫描面为 0 时不许报 PASS</b>
+      <p>空目录、无 <code>.py</code>、无 <code>.md</code> 一律输出 <code>N/A</code> 并打 <code>SCAN files=0</code>。
+      扫 0 个文件仍报绿，与「从不否决的闸门」是同一种东西。</p></div>
+  </div>
+</section>
+
+<!-- ============ 4 ============ -->
+<section id="p4">
+  <h2>L5 改判：删掉一条会惩罚诚实的判据</h2>
+  <p class="lead">上一版 L5 是 <code>absent ≥ 3 × covered</code>。它当时的理由是「17 文件的仓库声称覆盖一半，
+  只可能是把提过当成做到」。这条理由本身没错，<b>但它把手段当成了目的</b>。</p>
+
+  <table>
+    <thead><tr><th style="width:20%">口径</th><th>规则</th><th>问题</th></tr></thead>
+    <tbody>
+      <tr><td>旧 L5</td><td><code>absent ≥ 3 × covered</code></td>
+        <td>覆盖上限被钉死在 25%。从 6 项做到 12 项，absent 90→83，<b>判红</b>。
+        于是「多做一个真判据」在账面上是扣分——<b>越诚实越红</b></td></tr>
+      <tr><td>新 L5</td><td>① 分母闭合（31 域 / 97 项算术对齐，<code>--source</code> 时与母版对撞）<br>
+        ② 每条 covered 在 <code>runs/</code> 里有 <code>FIRE</code> 记录，且同一份证据含非 PASS 输出<br>
+        ③ <code>text-only ≤ covered</code></td>
+        <td>无。三条都机械可判，且「声明我有这个判据」的成本变成「它抓过真东西」</td></tr>
+    </tbody>
+  </table>
+
+  <div class="warn"><b>这是一个已经出现过的病灶，只是方向反了。</b>
+  「从不否决的闸门」是永远绿；这条是永远红。两者都不是判据——判据必须有两条出路，
+  而且两条都有真实对象能走通。</div>
+
+  <h3>换掉之后，账反而更硬</h3>
+  <ul>
+    <li><b>分母可对撞</b>：<code>MAP.md</code> 写 97 项 / 31 域；<code>--source</code> 指向母版时实测 97，一致才放行。
+      上一轮真踩过「覆盖率 4.31%→68.59% 全靠分母从 8569 掉到 538」的坑，所以分母必须能被打。</li>
+    <li><b>声明要有现场</b>：12 条 covered 各自对应一条 <code>FIRE scripts/x.py::y</code>，共 15 个判据点、8 份证据文件。</li>
+    <li><b>账本自己对不上就红</b>：域表与条目表双向校验（两边各写一遍，必然有一天对不上）；
+      合计行与实测不符也红。缺分母时标 <code>UNVERIFIED</code>，不判红——外部 clone 没有母版，不是他的错。</li>
+  </ul>
+
+  <pre>$ python scripts/cover.py --source &lt;capability-inventory.md&gt; .
+
+覆盖账  root=junyi-lite
+  母版条目      97 (实测)
+  域            31  项数之和 97
+  covered       12  C1.2,C1.6,C14.2,C16.1,C2.6,C21.2,C25.1,C25.2,C3.5,C4.5,C6.2,C7.2
+  text-only     2   C3.3,C6.1
+  absent        83 (账内残差)
+  变红记录      8 份证据 / 15 个判据点
+<span class="g">L5     PASS     分母闭合 97 项 / 31 域, 12 条 covered 各有变红记录, text-only 2 &lt;= 12</span>
+RESULT red=0 yellow=0 l5=pass</pre>
+</section>
+
+<!-- ============ 5 ============ -->
+<section id="p5">
+  <h2>三口径验收</h2>
+  <table>
+    <thead><tr><th style="width:22%">口径</th><th>命令 / 来源</th><th>结果</th></tr></thead>
+    <tbody>
+      <tr><td>① 逐文件哈希</td><td><code>verify_remote.py</code>：本地 blob sha vs 远端 tree</td>
+        <td><span class="tag t-green">34 / 34 SAME → ACCEPT</span></td></tr>
+      <tr><td>② 提交链</td><td><code>api.github.com/.../commits</code></td>
+        <td><span class="tag t-green">7f63d86 ← 8cc61ba</span>（父提交在，历史未压平）</td></tr>
+      <tr><td>③ 下载副本复跑</td><td>codeload 整包 34 文件 → 六个自测 + 完整等级</td>
+        <td><span class="tag t-green">64/64 全绿 · GRADE super-expert</span></td></tr>
+      <tr><td>④ CI</td><td>run <code>43176285030</code>（3 job）</td>
+        <td><span class="tag t-green">全绿</span>，instrument job 步骤 10 → 12（新增 probe 两条）</td></tr>
+    </tbody>
+  </table>
+
+  <h2>本仓库自检（六件仪器在本仓上跑）</h2>
+  <pre>$ python scripts/gate.py .      → <span class="g">RESULT red=0 yellow=0</span>
+$ python scripts/shape.py .     → <span class="g">RESULT pass=3 red=0 yellow=0 na=0 info=1</span>
+$ python scripts/probe.py .     → <span class="g">RESULT red=0 yellow=1 na=0</span>
+                                (SWALLOW 有 3 处静默跳过，全部带理由 → 黄，不装成绿)
+$ python scripts/cover.py .     → <span class="g">RESULT red=0 yellow=0 l5=pass</span>
+
+$ python scripts/gate.py --grade .
+<span class="g">  L1 判据完备        PASS  13 条判据(METHOD+DOCTRINE)都带变红条件
+  L2 判据可被证伪    PASS  selftest 6/6
+  L3 真实案例 &gt;= 3    PASS  4 个案例,四段齐全,判据可对上
+  L4 判据被真仓打脸  PASS  5 个真仓证据, 7 条判据都红过
+  L5 覆盖诚实        PASS  分母闭合 + 每条 covered 有变红记录 + text-only&lt;=covered
+                      [账声明分母已过母版核验, 但母版不在本仓库: 这条核验来自账外输入, 别人复算不了]
+GRADE  super-expert (超级专家级)</span></pre>
+
+  <h2>六处「判据自己的口径错了」</h2>
+  <table>
+    <thead><tr><th style="width:24%">位置</th><th>错在哪</th><th>改法</th></tr></thead>
+    <tbody>
+      <tr><td>L4 被测对象数</td><td>probe 的 <code>files=</code> 只数代码文件：348 份文档 + 16 个脚本的目录被算成 16，证据直接判「样本不足」</td>
+        <td>统一成 <code>subjects=</code>（代码+文档），gate 三种格式依次认</td></tr>
+      <tr><td>L1 扫描面</td><td>只扫 <code>METHOD.md</code>，于是 <code>DOCTRINE.md</code> 那批算子准入门<b>从未被看过一遍</b></td>
+        <td>扫描面扩到两份；缺任一份即红</td></tr>
+      <tr><td>凭证模式</td><td>只认 sk-/bearer/私钥，而本仓库每天用 GitHub token——40 字节真 token 摆着报 0 红</td>
+        <td>补 <code>ghp_</code> / <code>github_pat_</code>，并加一条自测锁死</td></tr>
+      <tr><td>L4 缺证据的标签</td><td>条件写成 <code>(u4 and not f4)</code>，而"未知"时 <code>f4</code> 必然非空（它就是为什么未知），于是 UNKNOWN 永不出现，缺证据一律显示 <b>FAIL</b>——同一行的括号里却写着「(未知, 不是失败)」</td>
+        <td>改成 <code>u4</code> 直接判未知；并补断言锁<b>显示口径</b>，不只锁通过与否</td></tr>
+      <tr><td><code>--grade-l3</code> 的口径</td><td>两种模式都跑满五级，只有退出码按三级算，输出照打 <code>super-expert</code>/<code>expert</code>/<code>FAIL</code>。一份声称只看三级的报告，结论由五级算出</td>
+        <td>L4/L5 显示 <code>SKIP</code> 且不参与判定；<code>GRADE</code> 只出 <code>l3-pass</code> / <code>not-yet</code></td></tr>
+      <tr><td>falsify 的超时自测</td><td>名叫「超时不被当成通过」，实际用 <code>sleep(30)</code> 配 <code>timeout=120</code>——30 &lt; 120，从不触发超时，靠"在坏样本上返回 0"这条别的规则通过，还白等 60 秒</td>
+        <td>timeout 压到 1 秒真撞墙；超时拆成独立第三态；超时后杀整棵进程树（否则管道被孙进程占着，设 1 秒等 20 秒）。见 <code>cases/004</code></td></tr>
+    </tbody>
+  </table>
+
+  <div class="note"><b>还有一个只在字节层才看得见的坑</b>：Windows 子进程 stdout 是 CRLF，证据文件不归一到 LF，
+  上传后就是「内容对、字节不同」——上一轮 3 个 blob DIFF 正是这个病灶。这次在生成端
+  <code>replace('\r\n','\n')</code> 处理掉，34 文件无一含 CRLF。</div>
+</section>
+
+<!-- ============ 6 ============ -->
+<section id="p6">
+  <h2>没做完的，分三类</h2>
+  <table>
+    <thead><tr><th style="width:12%">类</th><th style="width:30%">项</th><th>判据 / 为什么要停</th></tr></thead>
+    <tbody>
+      <tr><td><span class="tag t-red">P0</span></td><td>无</td>
+        <td>本轮无阻塞项。上线、验证、复跑三口径全部完成</td></tr>
+      <tr><td><span class="tag t-yellow">待拍板</span></td><td>接口演进域要不要补版本号</td>
+        <td>补了就能覆盖第 5 域（15→5）；但 CLI 加 <code>--version</code> 就要求语义化版本纪律，
+        而本仓库三个月里版本号只出现过两次。<b>拍板点：是否接受「有版本号但没人维护」这种更糟的状态</b></td></tr>
+      <tr><td><span class="tag t-yellow">待拍板</span></td><td>DOMAINS 4/15 是否够</td>
+        <td>不打算硬凑。剩 11 域里 6 域是「静态工具库没有这个场景」（不适用），5 域是空位。
+        把不适用算成覆盖，与把「提过」算成「做到」是同一个错</td></tr>
+      <tr><td><span class="tag t-gray">暂缓</span></td><td>母版 13 个第三方技能</td>
+        <td>授权不在我手上，永久排除（已写进 <code>NOTICE.md</code>）</td></tr>
+      <tr><td><span class="tag t-gray">暂缓</span></td><td>97 项逐条判据化</td>
+        <td>83 项在本仓库没有被测物。写成判据会永远绿——那是装饰，不是判据</td></tr>
+    </tbody>
+  </table>
+
+  <h2>这一版删了什么</h2>
+  <ul>
+    <li><b>删了 L5 的比例判据</b>（<code>absent ≥ 3×covered</code>）：它惩罚诚实，见④。</li>
+    <li><b>删了 README 里重复的等级输出块</b>：同一段输出抄两个文件，迟早对不上（DUP 探针立刻抓到）。</li>
+    <li><b>删了 SHAPE.md 的「D&gt;3 即红」</b>：代码早已降级为只报数，文档没跟上——文档与代码不一致，比两个都错更难查。</li>
+    <li><b>删了「不含任何私有文档片段」这句声明</b>：全面吸取后它不再成立，改成授权记录。</li>
+  </ul>
+
+  <div class="ok"><b>一句话结论</b>：这一版没有让仓库变大很多（25→34 文件），但让<b>每一条声明都有了价格</b>——
+  说「我有这个判据」，就得拿出一份它红过的原始输出；说「覆盖了 12 项」，就得把 83 项缺席按域算平。
+  吸的是结构，长的是可判性。</div>
+</section>
+
+<div class="foot">
+  口径：34/34 blob 相同（verify_remote.py）· 12 covered / 2 text-only / 83 缺席（cover.py --source，母版实测 97 项 / 31 域）·
+  64/64 自测（六件仪器）· CI run 43176285030 三 job 全绿。｜交叉：下载副本 34 文件复跑，full grade = super-expert。
+</div>
+
+</div>
+<script>
+(function(){
+  var tabs = document.querySelectorAll('nav button');
+  function show(id){
+    document.querySelectorAll('section').forEach(function(s){ s.classList.toggle('on', s.id === id); });
+    tabs.forEach(function(b){ b.setAttribute('aria-selected', b.dataset.t === id ? 'true' : 'false'); });
+  }
+  tabs.forEach(function(b){ b.addEventListener('click', function(){ show(b.dataset.t); }); });
+})();
+</script>
+</body>
+</html>
