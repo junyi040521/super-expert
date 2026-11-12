@@ -1,0 +1,17 @@
+$ curl --noproxy "*" --resolve "github.com:443:20.200.245.247" -sSL --max-time 40 -o NUL -w "code=%{http_code} size=%{size_download} t=%{time_total}s" https://github.com
+code=200 size=0 t=40.002363s
+
+$ curl --noproxy "*" --resolve "github.com:443:4.237.22.38" -sSL --max-time 40 -o NUL -w "code=%{http_code} size=%{size_download} t=%{time_total}s" https://github.com
+curl: (56) Recv failure: Connection was reset
+code=000 size=0 t=26.721139s
+
+$ curl --noproxy "*" --resolve "github.com:443:140.82.112.3" -sSL --max-time 40 -o NUL -w "code=%{http_code} size=%{size_download} t=%{time_total}s" https://github.com
+curl: (28) Operation timed out after 40008 milliseconds with 0 bytes received
+code=000 size=0 t=40.009689s
+
+# 阳性对照：同一台机器、同一时段，另外两个域名能拿到正文
+$ curl --noproxy "*" -sS --max-time 30 -o readme.md -w "code=%{http_code} size=%{size_download} t=%{time_total}s" https://raw.githubusercontent.com/junyi040521/junyi-lite/main/README.md
+code=200 size=5534 t=0.9s
+
+$ curl --noproxy "*" -sSL --max-time 60 -o main.tar.gz -w "code=%{http_code} size=%{size_download} t=%{time_total}s" https://codeload.github.com/junyi040521/junyi-lite/tar.gz/refs/heads/main
+code=200 size=13985 t=0.698184s

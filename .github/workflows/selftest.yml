@@ -36,6 +36,11 @@ jobs:
       - name: 闸门扫本仓库（应为 0 红）
         run: python scripts/gate.py .
 
+      - name: 等级判定（不足超级专家级即失败）
+        # 这一条把「超级专家」这个名字挂到可数条件上：
+        # 判据完备 + 可被证伪 + 真实案例 >= 3，缺一级就红。
+        run: python scripts/gate.py --grade .
+
   py38-syntax-guard:
     # 兜底：即使某天 3.8 的 runner 彻底下架，这条仍能守住「3.8 兼容」的声明。
     # 它只查语法层，查不出的运行时 API 差异由上面那个真 3.8 job 负责。

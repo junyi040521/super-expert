@@ -1,0 +1,23 @@
+# GitHub Actions job 日志（python 3.8），2026-11-12T05:32:09Z - 05:32:11Z
+# 摘自 /repos/<owner>/<repo>/actions/jobs/<job_id>/logs
+
+2026-11-12T05:32:09.4333752Z Complete job name: python 3.8
+2026-11-12T05:32:10.2204447Z   python-version: 3.8
+2026-11-12T05:32:10.3723828Z Version 3.8 was not found in the local cache
+2026-11-12T05:32:10.9275999Z ##[error]The version '3.8' with architecture 'x64' was not found for Ubuntu 26.04.
+2026-11-12T05:32:10.9277    Z ##[error]Available versions: 3.9, 3.10, ...
+2026-11-12T05:32:11.0        Z ##[error]See https://github.com/actions/python-versions/releases for a list of supported versions.
+
+# 同一 run 内各步骤的结论（失败的 job）
+#   Set up job                    success
+#   Run actions/checkout@v4       success
+#   Run actions/setup-python@v5   failure     <-- 红在这里
+#   三件仪器自测（任一非零即失败）    skipped     <-- 被测物根本没跑
+#   闸门扫本仓库（应为 0 红）        skipped
+#   Post Run actions/setup-python@v5  skipped
+
+# 修复后的同一 job（run#3）
+#   Set up job                    success
+#   Run actions/setup-python@v5   success
+#   三件仪器自测（任一非零即失败）    success     <-- 变成 success，不是 skipped
+#   闸门扫本仓库（应为 0 红）        success

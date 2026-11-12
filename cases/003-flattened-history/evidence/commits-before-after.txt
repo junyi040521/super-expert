@@ -1,0 +1,50 @@
+# 事故前（第一次上传后回读）
+# GET /repos/<owner>/<repo>/commits?per_page=10
+commits = 1
+  f342405  ci: 修 3.8 测试通道（换成能跑的机器，而不是改高版本号）
+
+# 同一时刻的文件树：看起来完全正常
+# GET /repos/<owner>/<repo>/git/trees/<tree>?recursive=1
+blob 数 = 9
+  .gitattributes                          73 B
+  .github/workflows/selftest.yml         2279 B
+  .gitignore                              56 B
+  LICENSE                               1392 B
+  METHOD.md                             4397 B
+  README.md                             5534 B
+  scripts/falsify.py                    5559 B
+  scripts/gate.py                       7840 B
+  scripts/pack_det.py                   7121 B
+
+# CI 状态同样正常
+  run#2 completed success
+  run#3 completed success
+
+# => 内容层三个口径全绿，结构层少了一个提交。只看内容的断言全部沉默。
+
+# ---------------------------------------------------------------
+
+# 修复后（rebuild_history.py 按本地两个提交的 tree/message 重建）
+a1af789  -> ab449a7  files=9  parents=['<root>']
+8be398f  -> 9041e8d  files=9  parents=['ab449a72db27bb6d6953b002e6bea33596f7b815']
+ref main -> 9041e8daeadaaf393682085e1af3a9faa72cf3b3
+
+# 回读确认
+commits = 2
+  9041e8d  ci: 修 3.8 测试通道（换成能跑的机器，而不是改高版本号）
+  ab449a7  init: 七条判据 + 三件仪器 (junyi-lite v0.1)
+
+parents = ['ab449a7']
+
+# verify_remote.py 逐文件比对 blob sha
+  SAME   .gitattributes                     af20c6e
+  SAME   .github/workflows/selftest.yml     55b17d9
+  SAME   .gitignore                         3781d4e
+  SAME   LICENSE                            1519a01
+  SAME   METHOD.md                          35c2232
+  SAME   README.md                          40a3a63
+  SAME   scripts/falsify.py                 2a374da
+  SAME   scripts/gate.py                    4f3b2dc
+  SAME   scripts/pack_det.py                c18c1da
+--- 相同 9 / 不同 0 / 缺 0 / 多 0 ---
+ACCEPT
