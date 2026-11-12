@@ -1,0 +1,42 @@
+=== 2026-11-12 / Windows 11 / Python 3.13.14 ===
+
+--- A. 改造前：falsify --selftest（4 条，62.8 秒，无 TIMEOUT 字样）---
+
+$ time python scripts/falsify.py --selftest
+PASS real gate => criterion holds  bad sample must be rejected:ok; good sample must pass:ok
+PASS fake gate => caught  ok=False (期望 False)
+PASS over-rejecting gate => caught  ok=False (期望 False)
+PASS timeout not treated as pass  ok=False (期望 False)
+
+selftest 4/4
+rc=0 用时 62875ms
+
+--- B. 最小复现：sleep(3) 在两种 timeout 下的行为 ---
+
+# 最小复现: 一条会睡 3 秒的 checker, 配默认 timeout=120
+  rc=0  用时 3.3s  输出=b''
+  -> 它没有超时, 正常返回 0。所以'超时'那条自测走的其实不是超时分支。
+
+# 同一个 checker 配 timeout=1
+  rc=-9  用时 1.3s  输出=b'TIMEOUT'
+  -> 这才叫撞上超时: rc=-9, 且输出里带 TIMEOUT。
+
+--- C. 改造后：falsify --selftest（6 条，5.9 秒，rc=-9 真被走到）---
+
+$ time python scripts/falsify.py --selftest
+PASS real gate => criterion holds  bad sample must be rejected:ok; good sample must pass:ok
+PASS fake gate => caught  ok=False (期望 False)
+PASS over-rejecting gate => caught  ok=False (期望 False)
+PASS hard timeout => rc=-9 (真的撞上了)  rc=-9
+PASS timeout not treated as pass  ok=False (期望 False)
+PASS timeout => 两个方向都不算通过(含 bad 侧的假拒绝)  bad sample must be rejected=FAIL; good sample must pass=FAIL
+
+selftest 6/6
+
+--- D. 六件仪器自测总数（改造后）---
+gate       selftest 26/26
+pack_det   selftest 7/7
+falsify    selftest 6/6
+shape      selftest 9/9
+cover      selftest 13/13
+probe      selftest 11/11

@@ -96,8 +96,8 @@ li{margin:5px 0}
       <div class="n">covered / text-only / 缺席（母版 97 项）</div></div>
     <div class="card"><div class="k">判据数</div><div class="v">7 → 13</div>
       <div class="n">METHOD 7 条 + DOCTRINE 6 条，L1 双文件扫</div></div>
-    <div class="card"><div class="k">自测断言</div><div class="v">45 → 64</div>
-      <div class="n">gate 22 / probe 11 / cover 11 / shape 9 / pack 7 / falsify 4</div></div>
+    <div class="card"><div class="k">自测断言</div><div class="v">45 → 72</div>
+      <div class="n">gate 26 / probe 11 / cover 13 / shape 9 / pack 7 / falsify 6</div></div>
     <div class="card"><div class="k">真仓证据</div><div class="v">4 → 10</div>
       <div class="n">5 份形态＋探针记录、4 份变红记录、1 份覆盖账 JSON</div></div>
   </div>
@@ -267,13 +267,14 @@ $ python scripts/cover.py .     → <span class="g">RESULT red=0 yellow=0 l5=pas
 
 $ python scripts/gate.py --grade .
 <span class="g">  L1 判据完备        PASS  13 条判据(METHOD+DOCTRINE)都带变红条件
-  L2 判据可被证伪    PASS  selftest 4/4
-  L3 真实案例 &gt;= 3    PASS  3 个案例,四段齐全,判据可对上
+  L2 判据可被证伪    PASS  selftest 6/6
+  L3 真实案例 &gt;= 3    PASS  4 个案例,四段齐全,判据可对上
   L4 判据被真仓打脸  PASS  5 个真仓证据, 7 条判据都红过
   L5 覆盖诚实        PASS  分母闭合 + 每条 covered 有变红记录 + text-only&lt;=covered
+                      [账声明分母已过母版核验, 但母版不在本仓库: 这条核验来自账外输入, 别人复算不了]
 GRADE  super-expert (超级专家级)</span></pre>
 
-  <h2>三处「判据自己的口径错了」</h2>
+  <h2>六处「判据自己的口径错了」</h2>
   <table>
     <thead><tr><th style="width:24%">位置</th><th>错在哪</th><th>改法</th></tr></thead>
     <tbody>
@@ -283,6 +284,12 @@ GRADE  super-expert (超级专家级)</span></pre>
         <td>扫描面扩到两份；缺任一份即红</td></tr>
       <tr><td>凭证模式</td><td>只认 sk-/bearer/私钥，而本仓库每天用 GitHub token——40 字节真 token 摆着报 0 红</td>
         <td>补 <code>ghp_</code> / <code>github_pat_</code>，并加一条自测锁死</td></tr>
+      <tr><td>L4 缺证据的标签</td><td>条件写成 <code>(u4 and not f4)</code>，而"未知"时 <code>f4</code> 必然非空（它就是为什么未知），于是 UNKNOWN 永不出现，缺证据一律显示 <b>FAIL</b>——同一行的括号里却写着「(未知, 不是失败)」</td>
+        <td>改成 <code>u4</code> 直接判未知；并补断言锁<b>显示口径</b>，不只锁通过与否</td></tr>
+      <tr><td><code>--grade-l3</code> 的口径</td><td>两种模式都跑满五级，只有退出码按三级算，输出照打 <code>super-expert</code>/<code>expert</code>/<code>FAIL</code>。一份声称只看三级的报告，结论由五级算出</td>
+        <td>L4/L5 显示 <code>SKIP</code> 且不参与判定；<code>GRADE</code> 只出 <code>l3-pass</code> / <code>not-yet</code></td></tr>
+      <tr><td>falsify 的超时自测</td><td>名叫「超时不被当成通过」，实际用 <code>sleep(30)</code> 配 <code>timeout=120</code>——30 &lt; 120，从不触发超时，靠"在坏样本上返回 0"这条别的规则通过，还白等 60 秒</td>
+        <td>timeout 压到 1 秒真撞墙；超时拆成独立第三态；超时后杀整棵进程树（否则管道被孙进程占着，设 1 秒等 20 秒）。见 <code>cases/004</code></td></tr>
     </tbody>
   </table>
 

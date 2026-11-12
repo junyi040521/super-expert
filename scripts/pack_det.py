@@ -191,7 +191,12 @@ def main(argv):
     src, out_dir = argv[1], argv[2]
     name = "package"
     if "--name" in argv:
-        name = argv[argv.index("--name") + 1]
+        i = argv.index("--name")
+        if i + 1 >= len(argv) or argv[i + 1].startswith("--"):
+            # 上一版直接 argv[i+1] => 越界崩溃。崩比静默好, 但那是 traceback, 不是说明。
+            print("--name 需要一个值(不给就用默认的 package)")
+            return 2
+        name = argv[i + 1]
     os.makedirs(out_dir, exist_ok=True)
     zpath = os.path.join(out_dir, name + ".zip")
     files = build(src, zpath)

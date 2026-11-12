@@ -256,6 +256,12 @@ def run_cover(root, source=None):
     n_cov, n_txt = len(covered_ids), len(textonly_ids)
     n_items = sum(d["items"] for d in doms.values())
     n_src = count_source(source)
+    # 母版是否随仓库发布: 只记事实, 不参与判定。
+    # 它是给读账的人用的 —— "核验过"和"你能自己核验"是两件事。
+    src_present = None
+    if source:
+        want = os.path.basename(source)
+        src_present = any(want in fns for _dp, _dn, fns in os.walk(root))
     absent = None
 
     if total is not None:
@@ -320,6 +326,10 @@ def run_cover(root, source=None):
                        "domains": len(doms), "covered_n": n_cov,
                        "text_only_n": n_txt, "fire": len(fires), "l5": l5,
                        "source_verified": n_src is not None,
+                       # 光有 source_verified 不够: 它只说明"传了 --source"。
+                       # 母版有没有跟着仓库发出来, 决定这条核验别人能不能复算。
+                       "source": os.path.basename(source) if source else None,
+                       "source_present": src_present,
                        "red": len(reds), "yellow": len(yellows)}
 
 
@@ -358,7 +368,7 @@ def _map(root, dom_rows, item_rows, total):
 
 
 def selftest():
-    """11 项。必须同时验「该红会红」「该黄会黄」「L5 会判虚胖」。"""
+    """13 项。必须同时验「该红会红」「该黄会黄」「L5 会判虚胖」。"""
     base = tempfile.mkdtemp(prefix="cover_st_")
     results = []
 
@@ -445,6 +455,22 @@ def selftest():
         chk("no source => absent as residual, marked unverified",
             ok and j["absent"] == 7 and j["source_verified"] is False,
             "ok=%s absent=%s verified=%s" % (ok, j["absent"], j["source_verified"]))
+
+        # 12/13 参数必须被读进去, 不许静默吞掉后照常 rc=0。
+        # 「没传母版」和「母版路径打错」是两件事: 前者是诚实的账内自洽,
+        # 后者是用户以为自己算了母版、其实一次没读。
+        import contextlib
+        import io
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(buf):
+            rc_nofile = main(["--source", os.path.join(base, "没有这个文件.md"), repo])
+        chk("--source 指向不存在的文件 => rc=2(不许退化成'未核验')",
+            rc_nofile == 2, "rc=%s" % rc_nofile)
+
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(buf):
+            rc_noarg = main(["--json"])
+        chk("--json 缺路径 => rc=2", rc_noarg == 2, "rc=%s" % rc_noarg)
     finally:
         shutil.rmtree(base, ignore_errors=True)
 
@@ -461,8 +487,21 @@ def main(argv):
     source = None
     if "--source" in argv:
         i = argv.index("--source")
-        if i + 1 < len(argv):
-            source = argv[i + 1]
+        if i + 1 >= len(argv) or argv[i + 1].startswith("--"):
+            print("--source 需要一个文件路径; 不给就别写这个参数(分母退回账内合计行)")
+            return 2
+        source = argv[i + 1]
+        if not os.path.exists(source):
+            # 上一版把"路径打错"与"没传母版"当成同一件事:
+            # 都退化成"分母未核验"并 rc=0 —— 于是写了 --source 的人会以为算过母版,
+            # 其实一次都没读。这是这一族工具最典型的假绿形状: 参数被吞, 输出照旧。
+            print("--source 指向的文件不存在: %s" % source)
+            return 2
+    if "--json" in argv:
+        i = argv.index("--json")
+        if i + 1 >= len(argv) or argv[i + 1].startswith("--"):
+            print("--json 需要一个输出路径(不给就别写这个参数)")
+            return 2
     skip = set()
     for flag in ("--source", "--json"):
         if flag in argv:

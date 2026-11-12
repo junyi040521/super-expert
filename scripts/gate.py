@@ -301,11 +301,30 @@ def grade_l4(root):
     return fails, len(used), False
 
 
+def _source_in_repo(root, name):
+    """母版清单文件是否真的在这个仓库里。
+
+    账里写 `source_verified: true` 只说明"当初跑的时候传了 --source",
+    不说明那份母版跟着仓库发出来了。二者差别很大:
+    母版不在仓库里, 这条核验别人就复算不了 —— 它成了"关于证据的文字"。
+    """
+    if not name:
+        return None
+    want = os.path.basename(name)
+    for _dp, _dn, fns in os.walk(root):
+        if want in fns:
+            return True
+    return False
+
+
 def grade_l5(root):
-    """返回 (failures, ok, unknown)。证据 = runs/cover-*.json。"""
+    """返回 (failures, ok, unknown, note)。证据 = runs/cover-*.json。
+
+    note 是"通过了, 但这句话得说清楚"的补充, 不参与判定。
+    """
     d = os.path.join(root, "runs")
     if not os.path.isdir(d):
-        return ["runs/ 不存在: 覆盖账没有算过(未知, 不是失败)"], False, True
+        return ["runs/ 不存在: 覆盖账没有算过(未知, 不是失败)"], False, True, ""
     rec, fn = None, ""
     for name in sorted(os.listdir(d)):
         if not (name.startswith("cover-") and name.endswith(".json")):
@@ -321,21 +340,32 @@ def grade_l5(root):
             continue
         rec, fn = r, name
     if rec is None:
-        return ["runs/ 里没有带母版分母的 cover 记录"], False, True
-    cov = len(rec.get("covered") or [])   # 仅用于信息; l5 由 cover.py 自己算
+        return ["runs/ 里没有带母版分母的 cover 记录"], False, True, ""
     if rec.get("l5") is False:
         return ["%s: L5 不成立, absent=%s / covered=%s / text-only=%s"
                 % (fn, rec.get("absent"), rec.get("covered_n"),
-                   rec.get("text_only_n"))], False, False
+                   rec.get("text_only_n"))], False, False, ""
     if rec.get("l5") is not True:
-        return ["%s: L5 为 unknown, 分母未取到" % fn], False, True
+        return ["%s: L5 为 unknown, 分母未取到" % fn], False, True, ""
     if rec.get("source_verified") is False:
-        return ["%s: 分母未经母版核验, 覆盖账只能算账内自洽" % fn], False, True
-    return [], True, False
+        return ["%s: 分母未经母版核验, 覆盖账只能算账内自洽" % fn], False, True, ""
+    note = ""
+    if rec.get("source_verified") is True:
+        have = _source_in_repo(root, rec.get("source"))
+        if have is False:
+            note = ("[账声明分母已过母版核验, 但母版 %s 不在本仓库: "
+                    "这条核验来自账外输入, 别人复算不了]" % rec.get("source"))
+        elif have is None:
+            note = "[账里没记母版文件名, 这条核验无法复算]"
+    return [], True, False, note
 
 
-def run_grade(root):
-    """返回 (全体是否达标, 输出行, 逐级结果)。"""
+def run_grade(root, only_l3=False):
+    """返回 (全体是否达标, 输出行, 逐级结果)。
+
+    only_l3=True 时 L4/L5 一律 SKIP 且不参与判定 —— 这是 CI 用的口径:
+    它要回答的是"仓库内可独立验证的三级过没过", 不是"你有没有私有证据"。
+    """
     lines = ["等级判定"]
     titles = method_titles(root)
     lv = {}
@@ -375,21 +405,45 @@ def run_grade(root):
         lines.append("                      %s" % extra)
 
     # L4
+    # 缺证据是 UNKNOWN, 不是 FAIL —— 与下面 L5 同一写法。
+    # 上一版写成 (u4 and not f4): 未知时 f4 一定非空(它的内容就是"为什么未知"),
+    # 于是条件恒假, UNKNOWN 永不出现, 缺证据一律显示 FAIL ——
+    # 而同一行的括号里还写着"(未知, 不是失败)"。同一份输出自相矛盾。
     f4, n4, u4 = grade_l4(root)
     lv["L4"] = (not f4) if not u4 else False
-    tag4 = "UNKNOWN" if (u4 and not f4) else ("PASS" if not f4 else "FAIL")
-    lines.append("  L4 判据被真仓打脸  %-7s %s"
-                 % (tag4, "%d 个真仓证据, %d 条判据都红过"
-                    % (n4, len(L4_ITEMS)) if not f4
-                    else "; ".join(f4[:2])))
+    if only_l3:
+        lines.append("  L4 判据被真仓打脸  %-7s 本次不判(--grade-l3 只判仓库内可独立验证的三级)" % "SKIP")
+    else:
+        tag4 = "UNKNOWN" if u4 else ("PASS" if not f4 else "FAIL")
+        lines.append("  L4 判据被真仓打脸  %-7s %s"
+                     % (tag4, "%d 个真仓证据, %d 条判据都红过"
+                        % (n4, len(L4_ITEMS)) if not f4
+                        else "; ".join(f4[:2])))
 
     # L5
-    f5, ok5, u5 = grade_l5(root)
+    f5, ok5, u5, note5 = grade_l5(root)
     lv["L5"] = ok5
-    tag5 = "UNKNOWN" if (u5 and not ok5) else ("PASS" if ok5 else "FAIL")
-    lines.append("  L5 覆盖诚实        %-7s %s"
-                 % (tag5, "分母闭合 + 每条 covered 有变红记录 + text-only<=covered"
-                    if ok5 else "; ".join(f5[:2])))
+    if only_l3:
+        lines.append("  L5 覆盖诚实        %-7s 本次不判(--grade-l3 只判仓库内可独立验证的三级)" % "SKIP")
+    else:
+        tag5 = "UNKNOWN" if (u5 and not ok5) else ("PASS" if ok5 else "FAIL")
+        lines.append("  L5 覆盖诚实        %-7s %s"
+                     % (tag5, "分母闭合 + 每条 covered 有变红记录 + text-only<=covered"
+                        if ok5 else "; ".join(f5[:2])))
+        if note5:
+            # 通过了也要说清楚通过的前提: 复算不了的那部分, 不能算在自己头上。
+            lines.append("                      %s" % note5)
+
+    if only_l3:
+        # 只判三级时, 等级也只有"三级过没过"两种说法。
+        # 上一版照样打印五级的 super/expert —— 一份声称只看三级的输出,
+        # 结论却由五级算出, 读到 expert 的人无法知道是被 L4/L5 拉下来的。
+        ok = all(lv.get(k) for k in ("L1", "L2", "L3"))
+        name = ("l3-pass (L1-L3 全过; L4/L5 本次不判)" if ok
+                else "not-yet (L1-L3 未过)")
+        lines.append("")
+        lines.append("GRADE  %s" % name)
+        return ok, lines, lv
 
     ok = all(lv.get(k) for k in ("L1", "L2", "L3", "L4", "L5"))
     l3ok = all(lv.get(k) for k in ("L1", "L2", "L3"))
@@ -574,8 +628,24 @@ def selftest():
                 '{"covered": ["C1.1"], "absent": 90, "l5": %s, "items": %d,'
                 ' "source_verified": %s}' % (l5, items, verified))
 
-        ok8, _l8, _lv8 = run_grade(gd)
+        ok8, l8, _lv8 = run_grade(gd)
         chk("grade: no runs => not super", not ok8, "ok=%s" % ok8)
+        # 锁显示口径, 不只锁通过与否: 缺证据必须是 UNKNOWN。
+        # 上一版永远显示 FAIL, 而括号里写着"(未知, 不是失败)" —— 同一行自相矛盾。
+        l4line = [l for l in l8 if "L4" in l and "判据被真仓" in l]
+        chk("grade: no runs => L4 显示 UNKNOWN(不是 FAIL)",
+            bool(l4line) and "UNKNOWN" in l4line[0] and "FAIL" not in l4line[0],
+            l4line[0].strip() if l4line else "(没有 L4 行)")
+
+        # --grade-l3 的口径: 缺 L4/L5 证据时, 三级全绿就算过, 且不得显示五级结论。
+        ok_l3, l_l3, _ = run_grade(gd, only_l3=True)
+        chk("grade-l3: 缺 L4/L5 证据仍算过(三级全绿)", ok_l3, "ok=%s" % ok_l3)
+        l45 = [l for l in l_l3 if l.strip().startswith(("L4 ", "L5 "))]
+        chk("grade-l3: L4/L5 显示 SKIP 而不是 FAIL/UNKNOWN",
+            bool(l45) and all("SKIP" in l for l in l45), " | ".join(x.strip() for x in l45))
+        chk("grade-l3: GRADE 行不出现 super/expert 五级称号",
+            any("l3-pass" in l for l in l_l3),
+            [l for l in l_l3 if l.startswith("GRADE")][0].strip())
 
         for i in (1, 2, 3):
             _run_shape_ev("shape-%02d-a.txt" % i, 30,
@@ -636,13 +706,12 @@ def main(argv):
         print("not a dir: %s" % root)
         return 2
     if "--grade" in argv or "--grade-l3" in argv:
-        ok, lines, lv = run_grade(root)
+        only3 = "--grade-l3" in argv
+        # 上一版: 两种模式都跑五级, 只有 rc 按三级算 ——
+        # 输出里照样打 super/expert/FAIL/UNKNOWN, 读者看到的是五级结论。
+        ok, lines, lv = run_grade(root, only_l3=only3)
         print("\n".join(lines))
-        if "--grade-l3" in argv:
-            # CI 用这个: 只判仓库内可独立验证的 L1-L3。
-            # L4/L5 需要外部证据(真实仓库样本、母版分母), 缺它们是 UNKNOWN 而不是红,
-            # 让 CI 因为「没有私有文件」变红, 会训练所有人忽略红。
-            ok = all(lv.get(k) for k in ("L1", "L2", "L3"))
+        if only3:
             print("SCOPE  L1-L3 only (完整等级请跑 --grade)")
         return 0 if ok else 1
     red, _yellow, lines = run(root)

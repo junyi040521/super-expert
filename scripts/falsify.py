@@ -26,37 +26,93 @@ import tempfile
 import subprocess
 
 
+TIMEOUT_RC = -9
+
+
+def _kill_tree(p):
+    """杀掉整棵进程树。返回错误说明, 没有错就返回空串 —— 杀不掉必须留痕。
+
+    只 kill 直接子进程是不够的: shell=True 时那个子进程是 cmd.exe / sh,
+    它底下的真 checker 还活着并占着 stdout 管道 —— 于是 communicate() 会一直
+    等到真 checker 自己退出。表现为"设了 1 秒超时, 实际等了 20 秒"。
+    实测: 只 kill 子进程时, 一条 sleep(20) 的用例仍稳定占满 60 秒(三个方向)。
+
+    这里不允许 `except: pass`: 杀不掉就意味着超时收尾不可靠,
+    那必须写进输出让人看见, 否则它就是一次无声的失败。
+    """
+    try:
+        if os.name == "nt":
+            subprocess.run(["taskkill", "/F", "/T", "/PID", str(p.pid)],
+                           capture_output=True, timeout=15)
+        else:
+            os.killpg(os.getpgid(p.pid), 9)
+        return ""
+    except Exception as e:                # noqa: BLE001
+        first = "%s: %s" % (type(e).__name__, e)
+        try:
+            p.kill()
+            return "taskkill/killpg 失败, 已退回 p.kill (%s)" % first
+        except Exception as e2:           # noqa: BLE001
+            return "杀进程树失败 (%s; 退回 p.kill 也失败: %s)" % (first, e2)
+
+
 def run_checker(cmd_tpl, root, timeout=120):
     cmd = cmd_tpl.replace("{root}", root)
+    kw = {}
+    if os.name == "nt":
+        kw["creationflags"] = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+    else:
+        kw["start_new_session"] = True
+    p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE,
+                         stderr=subprocess.STDOUT, **kw)
     try:
-        p = subprocess.run(cmd, shell=True, capture_output=True, timeout=timeout)
-        return p.returncode, (p.stdout or b"") + (p.stderr or b"")
+        out, _ = p.communicate(timeout=timeout)
+        return p.returncode, out or b""
     except subprocess.TimeoutExpired:
-        return -9, b"TIMEOUT"
+        err = _kill_tree(p)
+        try:
+            out, _ = p.communicate(timeout=10)
+        except subprocess.TimeoutExpired:
+            out = b""
+        tail = b"TIMEOUT"
+        if err:
+            tail += (" | " + err).encode("utf-8", "replace")
+        return TIMEOUT_RC, (out or b"") + tail
 
 
-def falsify(cmd_tpl, good, bad):
-    """返回 (ok, rows)。ok=False 表示判据失效。"""
+def falsify(cmd_tpl, good, bad, timeout=120):
+    """返回 (ok, rows, out_bad, out_good)。ok=False 表示判据失效。
+
+    超时是一个独立的第三态, 不是"拒绝"也不是"通过":
+      在 bad 上超时, 看起来像"没放行", 但实际是没测出来 —— 算拒绝就是假绿;
+      在 good 上超时, 看起来像"报错", 但实际也是没测出来 —— 诊断成"误伤"会把人引向错的方向。
+    两个方向只要出现超时, ok 一律 False, 并且诊断行直说"超时"。
+    """
     rows = []
     ok = True
 
-    rc_bad, out_bad = run_checker(cmd_tpl, bad)
+    rc_bad, out_bad = run_checker(cmd_tpl, bad, timeout)
     passed_on_bad = (rc_bad == 0)
-    rows.append(("bad sample must be rejected", not passed_on_bad,
-                 "rc=%d" % rc_bad))
-    if passed_on_bad:
+    timed_out_bad = (rc_bad == TIMEOUT_RC)
+    rows.append(("bad sample must be rejected", not passed_on_bad and not timed_out_bad,
+                 "rc=%d%s" % (rc_bad, " 超时: 没测出来, 不算拒绝" if timed_out_bad else "")))
+    if passed_on_bad or timed_out_bad:
         ok = False
 
-    rc_good, out_good = run_checker(cmd_tpl, good)
+    rc_good, out_good = run_checker(cmd_tpl, good, timeout)
     failed_on_good = (rc_good != 0)
+    timed_out_good = (rc_good == TIMEOUT_RC)
     rows.append(("good sample must pass", not failed_on_good,
-                 "rc=%d" % rc_good))
+                 "rc=%d%s" % (rc_good, " 超时: 没测出来, 不算通过" if timed_out_good else "")))
     if failed_on_good:
         ok = False
 
     if passed_on_bad:
         rows.append(("diagnosis", False, "闸门在坏样本上放行 = 装饰"))
-    if failed_on_good:
+    if timed_out_bad or timed_out_good:
+        rows.append(("diagnosis", False,
+                     "超时 = 未完成判定; 不是拒绝, 也不是误伤, 更不是通过"))
+    elif failed_on_good:
         rows.append(("diagnosis", False, "闸门在好样本上报错 = 误伤"))
 
     return ok, rows, out_bad, out_good
@@ -115,9 +171,20 @@ def selftest():
         ok_over, _, _, _ = falsify('"%s" "%s" {root}' % (py, always), good, bad)
         chk("over-rejecting gate => caught", not ok_over, "ok=%s (期望 False)" % ok_over)
 
-        # 超时视为未通过, 不得静默当作成功
-        ok_to, _, _, _ = falsify('"%s" -c "import time;time.sleep(30)"' % py, good, bad)
+        # 超时视为未通过, 不得静默当作成功。
+        # 上一版这里写 sleep(30) 配默认 timeout=120 —— 它 30 秒后正常返回 0,
+        # 走的是"放行"那条路径, 从未触发 TimeoutExpired, 却白占了 60 秒(两个方向各一次)。
+        # 名字测的是超时, 实际测的是放行。现在把 timeout 压到 1 秒, 让它真的撞墙。
+        slow = '"%s" -c "import time;time.sleep(20)"' % py
+        rc_to, _ = run_checker(slow, good, timeout=1)
+        chk("hard timeout => rc=-9 (真的撞上了)", rc_to == TIMEOUT_RC, "rc=%s" % rc_to)
+
+        ok_to, rows_to, _, _ = falsify(slow, good, bad, timeout=1)
         chk("timeout not treated as pass", not ok_to, "ok=%s (期望 False)" % ok_to)
+        hard = [(n, c) for n, c, _ in rows_to if n != "diagnosis"]
+        chk("timeout => 两个方向都不算通过(含 bad 侧的假拒绝)",
+            not any(c for _, c in hard),
+            "; ".join("%s=%s" % (n, "PASS" if c else "FAIL") for n, c in hard))
     finally:
         shutil.rmtree(base, ignore_errors=True)
 

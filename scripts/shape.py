@@ -420,15 +420,18 @@ def main(argv):
     print("\n".join(lines))
     if "--json" in argv:
         i = argv.index("--json")
-        if i + 1 < len(argv):
-            out = argv[i + 1]
-            d = os.path.dirname(os.path.abspath(out))
-            if d:
-                os.makedirs(d, exist_ok=True)
-            with open(out, "w", encoding="utf-8", newline="\n") as f:
-                json.dump(rec, f, ensure_ascii=False, indent=1, sort_keys=True)
-                f.write("\n")
-            print("WROTE %s" % out)
+        if i + 1 >= len(argv) or argv[i + 1].startswith("--"):
+            # 缺路径时不许静默跳过: 写了 --json 却没落盘, 而 rc 照旧 —— 与没写一样却看不出来。
+            print("--json 需要一个输出路径(不给就别写这个参数)")
+            return 2
+        out = argv[i + 1]
+        d = os.path.dirname(os.path.abspath(out))
+        if d:
+            os.makedirs(d, exist_ok=True)
+        with open(out, "w", encoding="utf-8", newline="\n") as f:
+            json.dump(rec, f, ensure_ascii=False, indent=1, sort_keys=True)
+            f.write("\n")
+        print("WROTE %s" % out)
     return 0 if ok else 1
 
 
