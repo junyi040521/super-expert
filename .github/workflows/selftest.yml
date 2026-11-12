@@ -1,0 +1,31 @@
+name: selftest
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  instruments:
+    name: python ${{ matrix.python }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.8 是 README 声明的最低版本。声明不被 CI 验证，
+        # 就只是一句好听话。低版本单独跑，才能证伪。
+        python: ["3.8", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: 三件仪器自测（任一非零即失败）
+        run: |
+          python scripts/gate.py --selftest
+          python scripts/pack_det.py --selftest
+          python scripts/falsify.py --selftest
+
+      - name: 闸门扫本仓库（应为 0 红）
+        run: python scripts/gate.py .
