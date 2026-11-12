@@ -6,14 +6,20 @@ on:
 
 jobs:
   instruments:
-    name: python ${{ matrix.python }}
-    runs-on: ubuntu-latest
+    name: python ${{ matrix.python }} @ ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        # 3.8 是 README 声明的最低版本。声明不被 CI 验证，
-        # 就只是一句好听话。低版本单独跑，才能证伪。
-        python: ["3.8", "3.12"]
+        include:
+          # 3.8 是 README 声明的最低版本。声明不被 CI 验证，就只是一句好听话。
+          # 3.8 已 EOL，ubuntu-latest（26.04）不再提供它的预编译包 —— 2026-11-12
+          # 实测 setup-python 报 "The version '3.8' ... was not found for Ubuntu 26.04"。
+          # 修法不是把版本号改高了事，而是给它一台跑得起来的机器。
+          - python: "3.8"
+            os: ubuntu-22.04
+          - python: "3.12"
+            os: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -29,3 +35,33 @@ jobs:
 
       - name: 闸门扫本仓库（应为 0 红）
         run: python scripts/gate.py .
+
+  py38-syntax-guard:
+    # 兜底：即使某天 3.8 的 runner 彻底下架，这条仍能守住「3.8 兼容」的声明。
+    # 它只查语法层，查不出的运行时 API 差异由上面那个真 3.8 job 负责。
+    name: 3.8 语法守卫（静态兜底）
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: ast.parse(feature_version=3.8) 必须全部通过
+        run: |
+          python - <<'PY'
+          import ast, pathlib, sys
+          bad = []
+          for f in sorted(pathlib.Path("scripts").glob("*.py")):
+              try:
+                  ast.parse(f.read_text(encoding="utf-8"),
+                            filename=str(f), feature_version=(3, 8))
+                  print("OK  ", f.name)
+              except SyntaxError as e:
+                  bad.append("%s:%s: %s" % (f.name, e.lineno, e.msg))
+          for b in bad:
+              print("FAIL", b)
+          print("3.8 语法不兼容数 =", len(bad))
+          sys.exit(1 if bad else 0)
+          PY

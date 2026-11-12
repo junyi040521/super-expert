@@ -118,6 +118,10 @@ python scripts/falsify.py \
 
 全部 Python 3.8+，纯标准库。
 
+这条声明本身是可证伪的，所以 CI 里 3.8 不是写在文档里，而是钉在 `ubuntu-22.04` 上真跑
+（3.8 已 EOL，`ubuntu-latest` 的 setup-python 不再提供它的预编译包）；另加一道
+`ast.parse(feature_version=(3, 8))` 静态守卫，避免哪天 3.8 的 runner 下架后声明悄悄失效。
+
 ---
 
 ## 为什么是这七条
