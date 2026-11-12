@@ -1,0 +1,16 @@
+# 变红记录(真实对象上跑出来的原始输出)
+FIRE scripts/probe.py::check_swallow
+FIRE scripts/probe.py::check_orphan
+FIRE scripts/probe.py::check_deps
+# 对象: 用户级技能目录(25 文件, 全部为本机自著技能)
+# 命令: python scripts/probe.py <dir>
+# 退出码: 1
+# 说明: 这不是声明, 是尺子在真东西上量出来的结果; 全程未做任何修图
+probe root=skills
+SCAN files=14 docs=11 subjects=25
+SWALLOW  RED    excepts=69 bare=34 architect-mindset/scripts/contract_audit.py:61,architect-mindset/scripts/dup_scan.py:248,architect-mindset/scripts/publish_audit.py:265,architect-mindset/scripts/publish_audit.py:308
+DUP      PASS   paras=214 no cross-file pair >=0.75
+ORPHAN   RED    README.md missing: no entry, every doc is orphan
+DEPS     RED    third-party uiautomation but no RUNTIME.md (undeclared)
+ITEMS SWALLOW=RED DUP=PASS ORPHAN=RED DEPS=RED
+RESULT red=3 yellow=0 na=0

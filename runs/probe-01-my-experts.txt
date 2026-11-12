@@ -1,0 +1,17 @@
+# 变红记录(真实对象上跑出来的原始输出)
+FIRE scripts/probe.py::check_swallow
+FIRE scripts/probe.py::check_dup
+FIRE scripts/probe.py::check_orphan
+FIRE scripts/probe.py::check_deps
+# 对象: 插件市场目录(383 文件, 含 13 个第三方技能与 1 个自著技能)
+# 命令: python scripts/probe.py <dir>
+# 退出码: 1
+# 说明: 这不是声明, 是尺子在真东西上量出来的结果; 全程未做任何修图
+probe root=my-experts
+SCAN files=16 docs=348 subjects=364
+SWALLOW  RED    excepts=25 bare=8 plugins/junyi/skills/architect-mindset/scripts/contract_audit.py:61,plugins/junyi/skills/architect-mindset/scripts/dup_scan.py:248,plugins/junyi/skills/architect-mindset/scripts/publish_audit.py:265,plugins/junyi/skills/architect-mindset/scripts/publish_audit.py:308
+DUP      RED    21 clusters in >=3 files e.g. plugins/junyi/skills/impeccable/references/animate.md:p9,plugins/junyi/skills/impeccable/references/bolder.md:p9,plugins/junyi/skills/impeccable/references/colorize.md:p9
+ORPHAN   RED    README.md missing: no entry, every doc is orphan
+DEPS     RED    third-party requests,yaml but no RUNTIME.md (undeclared)
+ITEMS SWALLOW=RED DUP=RED ORPHAN=RED DEPS=RED
+RESULT red=4 yellow=0 na=0

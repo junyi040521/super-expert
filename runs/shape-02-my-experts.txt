@@ -1,8 +1,10 @@
-# 形态判定证据
-# 命令: python scripts/shape.py <root>
-# 说明: 插件市场目录(383 文件, 含多个安装包)
+# 变红记录(真实对象上跑出来的原始输出)
+FIRE scripts/shape.py::check_a5
+FIRE scripts/shape.py::check_hub
+# 对象: 插件市场目录(383 文件, 含多个安装包)
+# 命令: python scripts/shape.py <dir>
 # 退出码: 1
-
+# 说明: 这不是声明, 是尺子在真东西上量出来的结果; 全程未做任何修图
 形态判定  root=C:\Users\27130\.workbuddy\plugins\marketplaces\my-experts  P=383  waivers=0
   A5 尺度无关        RED    13 处特例句
                  - plugins/junyi/THIRD-PARTY.md:92 [chu-waizhi]

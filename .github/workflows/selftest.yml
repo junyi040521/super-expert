@@ -27,13 +27,14 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
 
-      - name: 五件仪器自测（任一非零即失败）
+      - name: 六件仪器自测（任一非零即失败）
         run: |
           python scripts/gate.py --selftest
           python scripts/pack_det.py --selftest
           python scripts/falsify.py --selftest
           python scripts/shape.py --selftest
           python scripts/cover.py --selftest
+          python scripts/probe.py --selftest
 
       - name: 闸门扫本仓库（应为 0 红）
         run: python scripts/gate.py .
@@ -41,9 +42,12 @@ jobs:
       - name: 形态判定（本仓库应 0 红，N/A 允许）
         run: python scripts/shape.py .
 
-      - name: 覆盖账（无母版时应为 unknown，不是 absent）
+      - name: 通用探针（本仓库应 0 红；豁免项计黄并带理由）
+        run: python scripts/probe.py .
+
+      - name: 覆盖账（无母版时应为账内残差并标注未核验）
         # 公开仓库里没有母版清单。这一条验的是「读不到时不撒谎」：
-        # 必须输出 UNKNOWN 且退出 0。如果哪天它把 unknown 判成 absent 而失败，
+        # 必须标 `分母未核验` 且仍然闭合，退出 0。如果哪天它把未核验判成红，
         # 说明有人的"修复"把诚实报告变成了惩罚。
         run: python scripts/cover.py .
 

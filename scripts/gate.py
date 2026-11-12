@@ -22,10 +22,17 @@ import subprocess
 
 SELF = os.path.basename(__file__)
 
+# 判据表有两份: 方法与算子。少扫一份, 那一份里的小节就永远不被检查。
+CRIT_FILES = ("METHOD.md", "DOCTRINE.md")
+
 # 拼接构造，避免源码自匹配
 _PAT_CRED = [
     ("private-key", "-----BEGIN" + r"\s+[A-Z ]*PRIVATE" + r"\s+KEY-----"),
     ("api-key", r"\b" + "sk" + r"-[A-Za-z0-9]{20,}"),
+    # 这一条是被自己漏掉过的: 仓库的发布流程天天用 GitHub token,
+    # 而扫描表里只有 sk-/bearer/PRIVATE KEY, 于是真 token 摆在那儿算 0 红。
+    ("github-token", r"\b" + "gh" + r"[pousr]_[A-Za-z0-9]{30,}"),
+    ("github-pat", r"\b" + "github" + r"_pat_[A-Za-z0-9_]{30,}"),
     ("bearer", r"Bearer" + r"\s+[A-Za-z0-9_\-\.]{30,}"),
     ("assign", r"(?:passwd|password|secret)\s*[:=]\s*['\"][^'\"\s]{6,}['\"]"),
     ("internal-ip", r"\b(?:10|172\.(?:1[6-9]|2\d|3[01])|192\.168)\.\d{1,3}\.\d{1,3}\b"),
@@ -74,23 +81,11 @@ def check_cred(root):
     return red, yellow
 
 
-def check_criteria(root):
-    """METHOD.md 的每条判据必须带一个结构化的变红条件字段。红: 缺。
-
-    不能只查「文中出现变红条件四个字」——
-    「没有变红条件」这句话本身就含那四个字, 会直接绕过检查。
-    判据必须是标记行, 不是子串。这是本文件唯一一处刻意反子串的地方。
-    """
-    path = os.path.join(root, "METHOD.md")
-    if not os.path.exists(path):
-        return ["METHOD.md missing"], []
+def _crit_scan(path):
+    """返回 [(小节标题, 是否有变红条件字段)]。按行首 "## " 切段。"""
     txt = read_text(path) or ""
-    red = []
-    # 按行首 "## " 算段落边界。不用 split:
-    # 文件若本身以 "## " 开头, split 不产生前导块, 硬切 [1:] 会把唯一一段丢掉。
     marks = list(re.finditer(r"(?m)^## ", txt))
-    if not marks:
-        return ["METHOD.md 里没有任何判据小节"], []
+    out = []
     for i, m in enumerate(marks):
         start = m.end()
         end = marks[i + 1].start() if i + 1 < len(marks) else len(txt)
@@ -99,8 +94,42 @@ def check_criteria(root):
         head = (body[:nl] if nl != -1 else body).strip()
         if not head or head.startswith("附"):
             continue
-        if not re.search(r"\*\*变红条件\*\*\s*[：:]", body):
-            red.append("判据缺变红条件字段: %s" % head[:40])
+        out.append((head, bool(re.search(r"\*\*变红条件\*\*\s*[：:]", body))))
+    return out
+
+
+def criteria_count(root):
+    n = 0
+    for fn in CRIT_FILES:
+        p = os.path.join(root, fn)
+        if os.path.exists(p):
+            n += len(_crit_scan(p))
+    return n
+
+
+def check_criteria(root):
+    """判据表的每条小节必须带一个结构化的变红条件字段。红: 缺。
+
+    不能只查「文中出现变红条件四个字」——
+    「没有变红条件」这句话本身就含那四个字, 会直接绕过检查。
+    判据必须是标记行, 不是子串。这是本文件唯一一处刻意反子串的地方。
+
+    扫描面是两份文件, 不是一份: 上一版只扫 METHOD.md, 于是 DOCTRINE.md
+    里那批算子准入门从来没被 L1 看过一遍 —— 扫描面写窄等于报假绿。
+    """
+    red = []
+    for fn in CRIT_FILES:
+        path = os.path.join(root, fn)
+        if not os.path.exists(path):
+            red.append("%s 缺失: 判据表缺一份, 完备就无从谈起" % fn)
+            continue
+        secs = _crit_scan(path)
+        if not secs:
+            red.append("%s 里没有任何判据小节" % fn)
+            continue
+        for head, has in secs:
+            if not has:
+                red.append("%s 判据缺变红条件字段: %s" % (fn, head[:40]))
     return red, []
 
 
@@ -227,30 +256,34 @@ def grade_l3(root, titles):
 
 GRADE_L4_RUNS = 3
 GRADE_L4_MIN_P = 20
-# 深度检查已降为 INFO(恒 N/A 或恒红都不算判据), 所以 L4 只要求三条各红一次。
-L4_ITEMS = ("A5", "A2", "HUB")
+# 深度检查已降为 INFO(恒 N/A 或恒红都不算判据), 所以 L4 只要求这七条各红一次:
+# 前三条是形态(shape), 后四条是通用探针(probe)。
+L4_ITEMS = ("A5", "A2", "HUB", "SWALLOW", "DUP", "ORPHAN", "DEPS")
 
 
 def grade_l4(root):
-    """返回 (failures, used_count, unknown)。证据 = runs/shape-*.txt。"""
+    """返回 (failures, used_count, unknown)。证据 = runs/*.txt 里的 ITEMS 行。"""
     d = os.path.join(root, "runs")
     if not os.path.isdir(d):
-        return ["runs/ 不存在: 形态判据没有在任何真实仓库上跑过(未知, 不是失败)"], 0, True
-    names = sorted(f for f in os.listdir(d)
-                   if f.startswith("shape-") and f.endswith(".txt"))
+        return ["runs/ 不存在: 判据没有在任何真实仓库上跑过(未知, 不是失败)"], 0, True
+    names = sorted(f for f in os.listdir(d) if f.endswith(".txt"))
     if not names:
-        return ["runs/ 里没有 shape-*.txt 证据"], 0, True
+        return ["runs/ 里没有任何 *.txt 证据"], 0, True
     hit, used = {}, []
     for fn in names:
         txt = read_text(os.path.join(d, fn)) or ""
-        m = re.search(r"P=(\d+)", txt)
+        # shape 打 P=<文件数>, probe 打 SCAN ... subjects=<被测对象数>。
+        # 口径必须统一成"被测对象数": probe 的 files= 只数代码文件,
+        # 一个 348 份文档 + 16 个脚本的目录会被它算成 16, 于是证据被判成"样本不足"。
+        m = (re.search(r"subjects=(\d+)", txt) or re.search(r"P=(\d+)", txt)
+             or re.search(r"files=(\d+)", txt))
         p = int(m.group(1)) if m else 0
         if p < GRADE_L4_MIN_P:
             continue
         im = re.search(r"(?m)^ITEMS (.+)$", txt)
         if not im:
             continue
-        used.append("%s(P=%d)" % (fn, p))
+        used.append("%s(%d)" % (fn, p))
         for kv in im.group(1).split():
             if "=" not in kv:
                 continue
@@ -282,20 +315,23 @@ def grade_l5(root):
             continue
         try:
             r = json.loads(txt)
-        except ValueError:
+        except ValueError:  # noqa: swallow 半截 JSON 视为没有这条记录, 与缺失同义
             continue
         if r.get("items") is None:
             continue
         rec, fn = r, name
     if rec is None:
         return ["runs/ 里没有带母版分母的 cover 记录"], False, True
-    cov = len(rec.get("covered") or [])
-    if rec.get("l5") is True:
-        return [], True, False
+    cov = len(rec.get("covered") or [])   # 仅用于信息; l5 由 cover.py 自己算
     if rec.get("l5") is False:
-        return ["%s: L5 不成立, absent=%s 与 covered=%d 的比例过于乐观"
-                % (fn, rec.get("absent"), cov)], False, False
-    return ["%s: L5 为 unknown, 分母未取到" % fn], False, True
+        return ["%s: L5 不成立, absent=%s / covered=%s / text-only=%s"
+                % (fn, rec.get("absent"), rec.get("covered_n"),
+                   rec.get("text_only_n"))], False, False
+    if rec.get("l5") is not True:
+        return ["%s: L5 为 unknown, 分母未取到" % fn], False, True
+    if rec.get("source_verified") is False:
+        return ["%s: 分母未经母版核验, 覆盖账只能算账内自洽" % fn], False, True
+    return [], True, False
 
 
 def run_grade(root):
@@ -309,8 +345,8 @@ def run_grade(root):
     lv["L1"] = not red1
     lines.append("  L1 判据完备        %s  %s"
                  % ("PASS" if lv["L1"] else "FAIL",
-                    "%d 条判据都带变红条件" % len(titles) if lv["L1"]
-                    else "; ".join(red1[:3])))
+                    "%d 条判据(METHOD+DOCTRINE)都带变红条件" % criteria_count(root)
+                    if lv["L1"] else "; ".join(red1[:3])))
 
     # L2
     fals = os.path.join(root, "scripts", "falsify.py")
@@ -342,7 +378,7 @@ def run_grade(root):
     f4, n4, u4 = grade_l4(root)
     lv["L4"] = (not f4) if not u4 else False
     tag4 = "UNKNOWN" if (u4 and not f4) else ("PASS" if not f4 else "FAIL")
-    lines.append("  L4 形态被判据打脸  %-7s %s"
+    lines.append("  L4 判据被真仓打脸  %-7s %s"
                  % (tag4, "%d 个真仓证据, %d 条判据都红过"
                     % (n4, len(L4_ITEMS)) if not f4
                     else "; ".join(f4[:2])))
@@ -352,8 +388,8 @@ def run_grade(root):
     lv["L5"] = ok5
     tag5 = "UNKNOWN" if (u5 and not ok5) else ("PASS" if ok5 else "FAIL")
     lines.append("  L5 覆盖诚实        %-7s %s"
-                 % (tag5, "absent >= 3 x covered" if ok5
-                    else "; ".join(f5[:2])))
+                 % (tag5, "分母闭合 + 每条 covered 有变红记录 + text-only<=covered"
+                    if ok5 else "; ".join(f5[:2])))
 
     ok = all(lv.get(k) for k in ("L1", "L2", "L3", "L4", "L5"))
     l3ok = all(lv.get(k) for k in ("L1", "L2", "L3"))
@@ -438,6 +474,7 @@ def selftest():
         good = os.path.join(base, "good")
         _mk(good, "LICENSE", "MIT\n")
         _mk(good, "METHOD.md", "## 一 · 示例\n\n**变红条件**: 填不出就红\n")
+        _mk(good, "DOCTRINE.md", "## 算子 · 示例\n\n**变红条件**: 前提不成立就红\n")
         _mk(good, "README.md", "hello\n")
 
         r0, y0, _ = run(good)
@@ -452,6 +489,13 @@ def selftest():
         os.remove(os.path.join(good, "leak.py"))
         r2, _, _ = run(good)
         chk("remove key => back to 0", r2 == 0, "red=%d" % r2)
+
+        # 发布流程天天用 GitHub token, 而扫描表曾经只认 sk-/bearer/私钥。
+        # 这一条锁定那个漏洞: 换一种真 token 形态, 必须同样红。
+        _mk(good, "ci.env", "TOKEN=" + "gh" + "p_" + "a" * 36 + "\n")
+        r2b, _, _ = run(good)
+        chk("github token => red", r2b > 0, "red=%d" % r2b)
+        os.remove(os.path.join(good, "ci.env"))
 
         # 判据缺变红条件字段。这里刻意写「没有变红条件」:
         # 若检测器用子串匹配, 这句话反而会让它通过 —— 所以必须判红。
@@ -479,6 +523,8 @@ def selftest():
         _mk(gd, "LICENSE", "MIT\n")
         _mk(gd, "METHOD.md",
             "## 二 · 示例判据\n\n**变红条件**: 只有一个读数就红\n")
+        _mk(gd, "DOCTRINE.md",
+            "## 算子 · 示例\n\n**变红条件**: 前提不成立就红\n")
         _mk(gd, "scripts/falsify.py", "import sys\nsys.exit(0)\n")
 
         _mk_case(gd, "001-a")
@@ -519,18 +565,30 @@ def selftest():
         def _run_shape_ev(name, p, items):
             _mk(gd, "runs/" + name, "x P=%d\nITEMS %s\n" % (p, items))
 
+        def _run_probe_ev(name, n, items):
+            _mk(gd, "runs/" + name,
+                "SCAN files=4 docs=%d subjects=%d\nITEMS %s\n" % (n - 4, n, items))
+
+        def _cover(l5="true", verified="true", items=97):
+            _mk(gd, "runs/cover-01-a.json",
+                '{"covered": ["C1.1"], "absent": 90, "l5": %s, "items": %d,'
+                ' "source_verified": %s}' % (l5, items, verified))
+
         ok8, _l8, _lv8 = run_grade(gd)
         chk("grade: no runs => not super", not ok8, "ok=%s" % ok8)
 
         for i in (1, 2, 3):
             _run_shape_ev("shape-%02d-a.txt" % i, 30,
                           "A5=RED A2=RED HUB=YELLOW DEPTH=RED")
-        _mk(gd, "runs/cover-01-a.json",
-            '{"covered": ["C1.1"], "absent": 90, "l5": true, "items": 97}')
+        # probe 的证据必须被认: 只认 shape-* 的版本会把新仪器当没跑过
+        _run_probe_ev("probe-01-a.txt", 40,
+                      "SWALLOW=RED DUP=RED ORPHAN=RED DEPS=RED")
+        _cover()
         ok9, _l9, lv9 = run_grade(gd)
-        chk("grade: 3 shape + 1 cover => super", ok9,
+        chk("grade: 3 shape + 1 probe + cover => super", ok9,
             "ok=%s L4=%s L5=%s" % (ok9, lv9["L4"], lv9["L5"]))
 
+        os.remove(os.path.join(gd, "runs", "shape-02-a.txt"))
         os.remove(os.path.join(gd, "runs", "shape-03-a.txt"))
         ok10, _l10, _lv10 = run_grade(gd)
         chk("grade: 2 runs < 3 => not super", not ok10, "ok=%s" % ok10)
@@ -542,11 +600,22 @@ def selftest():
         chk("grade: one item never red => not super", not ok11,
             "L4=%s" % lv11["L4"])
 
-        _mk(gd, "runs/cover-01-a.json",
-            '{"covered": ["C1.1", "C1.2", "C1.3", "C1.4"], "absent": 6,'
-            ' "l5": false, "items": 10}')
+        for i in (1, 2, 3):
+            _run_shape_ev("shape-%02d-a.txt" % i, 30,
+                          "A5=RED A2=RED HUB=YELLOW DEPTH=RED")
+        _cover(verified="false")
         ok12, _l12, lv12 = run_grade(gd)
-        chk("grade: optimistic cover => not super", not ok12, "L5=%s" % lv12["L5"])
+        chk("grade: unverified denominator => not super", not ok12,
+            "L5=%s" % lv12["L5"])
+
+        _cover(l5="false", items=10)
+        ok13, _l13, lv13 = run_grade(gd)
+        chk("grade: cover l5 false => not super", not ok13, "L5=%s" % lv13["L5"])
+
+        # DOCTRINE.md 缺了就红: 判据表被分成两份之后, 少扫一份就是少查一半
+        os.remove(os.path.join(gd, "DOCTRINE.md"))
+        ok14, _l14, lv14 = run_grade(gd)
+        chk("grade: DOCTRINE missing => L1 fail", not lv14["L1"], "L1=%s" % lv14["L1"])
     finally:
         shutil.rmtree(base, ignore_errors=True)
 

@@ -1,18 +1,31 @@
 {
- "absent": 90,
+ "absent": 83,
  "covered": [
   "C1.2",
-  "C2.6",
-  "C3.5",
-  "C7.2",
+  "C1.6",
+  "C14.2",
   "C16.1",
-  "C25.2"
+  "C2.6",
+  "C21.2",
+  "C25.1",
+  "C25.2",
+  "C3.5",
+  "C4.5",
+  "C6.2",
+  "C7.2"
  ],
+ "covered_n": 12,
+ "domains": 31,
+ "fire": 15,
  "items": 97,
  "l5": true,
  "red": 0,
  "source": "capability-inventory.md",
+ "source_verified": true,
  "text_only": [
-  "C3.3"
- ]
+  "C3.3",
+  "C6.1"
+ ],
+ "text_only_n": 2,
+ "yellow": 0
 }

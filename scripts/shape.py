@@ -136,6 +136,7 @@ def is_waived(relpath, waivers):
 
 def check_a5(root, files):
     hits = []
+    waived = []
     for p in files:
         if not p.endswith((".md", ".txt")):
             continue
@@ -145,13 +146,21 @@ def check_a5(root, files):
         txt = read_text(p)
         if txt is None:
             continue
+        # 判据要能描述反例, 就得把反例句写出来 —— 于是它必然命中自己。
+        # 不给暗门, 给一条写在案发现场的豁免: 文件里写 `a5-waiver: <理由>`,
+        # 理由 >=4 字才算, 且被豁免的文件数会打印出来, 不静默。
+        wm = re.search(r"a5-waiver:\s*(\S.{3,})", txt)
+        if wm:
+            waived.append("%s(%s)" % (rel(root, p), wm.group(1)[:18]))
+            continue
         for lineno, line in enumerate(txt.splitlines(), 1):
             for name, pat in _PAT_A5:
                 if re.search(pat, line):
                     hits.append("%s:%d [%s]" % (rel(root, p), lineno, name))
     if hits:
         return "RED", "%d \u5904\u7279\u4f8b\u53e5" % len(hits), hits
-    return "PASS", "0 \u5904\u7279\u4f8b\u53e5", []
+    return ("PASS", "0 \u5904\u7279\u4f8b\u53e5" +
+            (" / waived=%d" % len(waived) if waived else ""), [])
 
 
 def check_a2(root, files, pcount):
@@ -177,7 +186,7 @@ def check_hub(root, dirs, waivers, strict):
             ents = [e for e in os.listdir(d)
                     if e not in SKIP_DIR and not e.startswith(".")]
             allents = [e for e in os.listdir(d) if e not in SKIP_DIR]
-        except OSError:
+        except OSError:  # noqa: swallow 目录在遍历中途被删, 跳过是正确语义
             continue
         if len(allents) != 1:
             continue
@@ -236,7 +245,7 @@ def check_depth(root, dirs, pcount):
     for d in dirs:
         try:
             ents = [e for e in os.listdir(d) if e not in SKIP_DIR]
-        except OSError:
+        except OSError:  # noqa: swallow 目录在遍历中途被删, 跳过是正确语义
             continue
         kids = [e for e in ents if os.path.isdir(os.path.join(d, e))]
         if kids:

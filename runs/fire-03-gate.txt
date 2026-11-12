@@ -1,0 +1,29 @@
+# 变红记录(真实对象上跑出来的原始输出)
+FIRE scripts/gate.py::check_cred
+FIRE scripts/gate.py::run_grade
+FIRE scripts/gate.py::grade_l3
+# 对象: A=本机真实 token 文件(40 字节) / B=oss 工作目录(11 个脚本, 无 cases)
+# 命令: python scripts/gate.py <dir> ; python scripts/gate.py --grade <dir>
+# 退出码: 1
+# 说明: 这不是声明, 是尺子在真东西上量出来的结果; 全程未做任何修图
+
+## A. 凭证扫描: 一个真实存在的凭证文件(只记命中位置, 不落内容)
+RED    CRED t.txt:1 [github-token]
+PASS   CRED (1 red / 0 yellow)
+RED    CRIT METHOD.md 缺失: 判据表缺一份, 完备就无从谈起
+RED    CRIT DOCTRINE.md 缺失: 判据表缺一份, 完备就无从谈起
+PASS   CRIT (2 red / 0 yellow)
+RED    LIC LICENSE 缺失: 无授权声明即默认保留所有权利
+PASS   LIC (1 red / 0 yellow)
+
+RESULT red=4 yellow=0
+
+## B. 等级判定: 一个没有 cases/ 与 METHOD.md 的真实目录
+等级判定
+  L1 判据完备        FAIL  METHOD.md 缺失: 判据表缺一份, 完备就无从谈起; DOCTRINE.md 缺失: 判据表缺一份, 完备就无从谈起
+  L2 判据可被证伪    FAIL  scripts/falsify.py 不存在
+  L3 真实案例 >= 3    FAIL  cases/ 目录不存在: 没有真实案例库就不能自称超级专家
+  L4 判据被真仓打脸  FAIL    runs/ 不存在: 判据没有在任何真实仓库上跑过(未知, 不是失败)
+  L5 覆盖诚实        UNKNOWN runs/ 不存在: 覆盖账没有算过(未知, 不是失败)
+
+GRADE  not-yet (未达专家级)

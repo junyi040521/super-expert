@@ -1,0 +1,21 @@
+# 变红记录(真实对象上跑出来的原始输出)
+FIRE scripts/falsify.py::falsify
+# 对象: 坏样本 = 含真实 token 的目录; 两个检查器一弱一真
+# 命令: python scripts/falsify.py --checker <cmd> --good <dir> --bad <dir>
+# 退出码: 1
+# 说明: 这不是声明, 是尺子在真东西上量出来的结果; 全程未做任何修图
+
+## A. 对一个只会退 0 的检查器(必须判它失效)
+FAIL bad sample must be rejected  rc=0
+PASS good sample must pass  rc=0
+FAIL diagnosis  闸门在坏样本上放行 = 装饰
+
+RESULT criterion FAILS
+--- output on bad sample ---
+
+
+## B. 对本仓库的 gate.py(必须判它成立)
+PASS bad sample must be rejected  rc=1
+PASS good sample must pass  rc=0
+
+RESULT criterion holds

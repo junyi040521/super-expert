@@ -1,0 +1,25 @@
+# 变红记录(真实对象上跑出来的原始输出)
+FIRE scripts/pack_det.py::build
+FIRE scripts/pack_det.py::verify
+FIRE scripts/pack_det.py::sha256
+# 对象: 本仓库自身的一份干净副本(1 文件), 第二步只追加了一段注释
+# 命令: python scripts/pack_det.py <src> <out> ; python scripts/pack_det.py <zip> --verify <src>
+# 退出码: 1
+# 说明: 这不是声明, 是尺子在真东西上量出来的结果; 全程未做任何修图
+
+## A. 打包(两次, 同树)
+files=24
+zip=C:\Users\27130\AppData\Local\Temp\pd_ev_wjy26h9l\out\package.zip
+sha256=09d5b3ca082cb983d22b4c64c40327ea70900cd515cc75dbb8b5e84f83a2c62a
+
+## B. 原样复核
+files=24
+zip   sha256=09d5b3ca082cb983d22b4c64c40327ea70900cd515cc75dbb8b5e84f83a2c62a
+rebuild sha256=09d5b3ca082cb983d22b4c64c40327ea70900cd515cc75dbb8b5e84f83a2c62a
+bytes_match=True entries_match=True
+
+## C. 改 1 字节后复核(必须不匹配)
+files=24
+zip   sha256=09d5b3ca082cb983d22b4c64c40327ea70900cd515cc75dbb8b5e84f83a2c62a
+rebuild sha256=ac7a6f4a3341ef0b807021443d084cc5a868db7b7ce4b3a52d55c8637961a00f
+bytes_match=False entries_match=False

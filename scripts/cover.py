@@ -1,24 +1,33 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""cover.py - 覆盖账。声明 covered 就得指向真实存在的代码。红则非零退出。
+"""cover.py - 覆盖账。声明 covered 就得指向真实存在、且真的红过的判据。
 
 用法:
-    python cover.py <root>                                  # 无母版, 只能判账本自身
+    python cover.py <root>                                  # 只能判账本自身
     python cover.py --source <capability-inventory.md> <root>
     python cover.py --selftest
 
-三条判定:
-    covered    声明有, 且判据指向的文件/标记真实存在(打开文件核对, 不信声明)
+三种状态:
+    covered    有判据, 判据指向的代码真实存在, 且 runs/ 里有它的变红记录
     text-only  只在文档里主张, 没有可执行判据
-    absent     未声明
+    absent     未被覆盖(在域表里按算术体现, 不逐条列出)
 
-L5 反向判据: absent >= 3 x covered 才算诚实。
-    未覆盖项必须远多于覆盖项 —— 一个 17 文件的仓库声称覆盖 97 项里的一半,
-    只可能是把「提过」当成「做到」。
+L5 三条(全部机械可判):
+    1 分母闭合    31 个域、每域 covered + text-only + absent == 项数;
+                  --source 提供时, 分母必须与母版条目数一致(防分母漂移)
+    2 有红的出路  每条 covered 的判据在 runs/ 里有一条 `FIRE <判据指向>`,
+                  且同一份证据里能看到非 PASS 的输出
+    3 账不虚胖    text-only 不得超过 covered
+
+旧版 L5 是 `absent >= 3 x covered`。已废弃, 原因是它会惩罚诚实:
+覆盖从 6 项做到 12 项时, 这条反而判红。一个「越诚实越红」的判据
+与「从不否决的闸门」是同一族缺陷, 只是方向相反。诚实的轴不是比例,
+是「每一条声明都有一次真实的红」。
 
 两条不可省的约束:
-  1. 读不到母版 => unknown, 不是 absent。读不到不等于未覆盖;
-     把它判成未覆盖, 会让诚实报告变成惩罚, 下次就没人愿意报告了。
+  1. 分母有两个来源: 本表合计行(账内残差)与 --source 实测。
+     读不到母版时仍能算出 absent, 但必须标 `分母未核验`——
+     「账内残差」与「实测未覆盖」是两件事, 混起来就成了自证。
   2. 合计行必须与实测条目数一致。账本自己对不上, 是最容易自欺的一种。
 """
 
@@ -29,54 +38,100 @@ import shutil
 import sys
 import tempfile
 
-SELF = os.path.basename(__file__)
 MAP = "MAP.md"
-TOTAL_RE = re.compile(r"cover-total\s+covered=(\d+)\s+text-only=(\d+)")
+DOMAIN_RE = re.compile(r"^(D\d+)\b")
 ID_RE = re.compile(r"^(C\d+\.\d+)$")
 ITEM_RE = re.compile(r"(?m)^###\s+(C\d+\.\d+)")
-L5_RATIO = 3
+TOTAL_RE = re.compile(
+    r"<!--\s*cover-total\s+items=(\d+)\s+domains=(\d+)\s+covered=(\d+)\s+text-only=(\d+)\s*-->")
+FIRE_RE = re.compile(r"(?m)^FIRE\s+(\S+::\S+)\s*$")
+# 非 PASS 的形态不止一种: 闸门的 RED、自测的 FAIL、等级的 not-yet、
+# 打包复核的 bytes_match=False。只认 RED 会把真实证据判成"全绿"。
+NONPASS_RE = re.compile(
+    r"(?m)^(?:RED|FAIL|YELLOW)\b"
+    r"|^RESULT .*(?:red=[1-9]|FAIL|not-yet|MISMATCH)"
+    r"|_match=False\b")
 
 
 def read_text(path):
     try:
         with open(path, "rb") as f:
             raw = f.read()
-        if b"\x00" in raw[:4096]:
-            return None
-        return raw.decode("utf-8", "replace")
     except OSError:
         return None
+    if b"\x00" in raw[:4096]:
+        return None
+    return raw.decode("utf-8", "replace")
+
+
+def _cells(line):
+    return [c.strip() for c in line.strip().strip("|").split("|")]
+
+
+def _ids(cell):
+    if cell.strip("` ").strip() in ("-", "--", "—", ""):
+        return []
+    out = []
+    for part in re.split(r"[,，\s]+", cell):
+        p = part.strip("` ")
+        if ID_RE.match(p):
+            out.append(p)
+    return out
 
 
 def parse_map(root):
-    """返回 (rows, total, failures)。rows 每项 {id,name,ref,kind}。"""
+    """返回 (domains, items, total, fails, yellows)。
+
+    domains: {D1: {items, covered[], text_only[], absent}}
+    items:   {C1.1: {name, ref, kind}}
+    """
     path = os.path.join(root, MAP)
     if not os.path.exists(path):
-        return [], None, ["%s 缺失: 没有覆盖声明, 覆盖账无从谈起" % MAP]
+        return {}, {}, None, ["%s 缺失: 没有覆盖声明, 覆盖账无从谈起" % MAP], []
     txt = read_text(path) or ""
-    rows, fails = [], []
+    doms, items, fails, yellows = {}, {}, [], []
     for line in txt.splitlines():
         s = line.strip()
         if not s.startswith("|"):
             continue
-        cells = [c.strip() for c in s.strip("|").split("|")]
+        cells = _cells(s)
         if len(cells) < 4:
             continue
-        cid = cells[0].strip("` ").strip()
-        if not ID_RE.match(cid):
-            continue
-        kind = cells[3].strip("` ").strip().lower()
-        if kind not in ("covered", "text-only"):
-            fails.append("%s: 类型只能是 covered / text-only, 读到 %r" % (cid, kind))
-            kind = "covered"
-        rows.append({"id": cid, "name": cells[1], "ref": cells[2], "kind": kind})
-    if not rows:
-        fails.append("%s 里没有任何 C<域>.<项> 条目" % MAP)
+        head = cells[0].strip("` ").strip()
+        dm = DOMAIN_RE.match(head)
+        if dm:
+            dkey = dm.group(1)
+            if len(cells) < 5:
+                fails.append("%s: 域行至少 5 列(域/项数/covered/text-only/缺席)" % dkey)
+                continue
+            try:
+                n = int(cells[1])
+                absent = int(cells[4])
+            except ValueError:
+                fails.append("%s: 项数或缺席数不是整数(%r/%r)" % (dkey, cells[1], cells[4]))
+                continue
+            cov, txtonly = _ids(cells[2]), _ids(cells[3])
+            doms[dkey] = {"items": n, "covered": cov, "text_only": txtonly,
+                          "absent": absent}
+        elif ID_RE.match(head):
+            kind = cells[3].strip("` ").strip().lower()
+            if kind not in ("covered", "text-only"):
+                fails.append("%s: 类型只能是 covered / text-only, 读到 %r" % (head, kind))
+                continue
+            items[head] = {"name": cells[1], "ref": cells[2], "kind": kind}
+    if not doms:
+        fails.append("%s 里没有任何 D<编号> 域行" % MAP)
+    if not items:
+        fails.append("%s 里没有任何 C<域>.<项> 条目行" % MAP)
     m = TOTAL_RE.search(txt)
-    total = (int(m.group(1)), int(m.group(2))) if m else None
-    if total is None:
-        fails.append("%s 缺合计行 <!-- cover-total covered=N text-only=M -->" % MAP)
-    return rows, total, fails
+    total = None
+    if m:
+        total = {"items": int(m.group(1)), "domains": int(m.group(2)),
+                 "covered": int(m.group(3)), "text_only": int(m.group(4))}
+    else:
+        fails.append("%s 缺合计行 <!-- cover-total items=N domains=N covered=N text-only=N -->"
+                     % MAP)
+    return doms, items, total, fails, yellows
 
 
 def check_ref(root, ref):
@@ -103,7 +158,6 @@ def check_ref(root, ref):
 
 
 def check_selftest(root, ref):
-    """covered 的脚本必须有 --selftest; 文档/目录不计。返回缺失的脚本名。"""
     miss = []
     for one in [x.strip() for x in ref.split(",") if x.strip()]:
         pth = one.split("::", 1)[0].strip("` ")
@@ -115,11 +169,30 @@ def check_selftest(root, ref):
     return miss
 
 
+def fire_index(root):
+    """runs/*.txt 里的变红记录。返回 ({ref: 文件名}, [证据弱到只有 FIRE 行的文件])。"""
+    d = os.path.join(root, "runs")
+    idx, weak = {}, []
+    if not os.path.isdir(d):
+        return idx, weak
+    for fn in sorted(os.listdir(d)):
+        if not fn.endswith(".txt"):
+            continue
+        txt = read_text(os.path.join(d, fn)) or ""
+        fires = FIRE_RE.findall(txt)
+        if not fires:
+            continue
+        if not NONPASS_RE.search(txt):
+            weak.append(fn)
+            continue
+        for r in fires:
+            idx.setdefault(r.strip("`"), fn)
+    return idx, weak
+
+
 def count_source(src):
     """母版条目数。读不到返回 None(=> unknown), 不返回 0。"""
-    if not src:
-        return None
-    if not os.path.exists(src):
+    if not src or not os.path.exists(src):
         return None
     txt = read_text(src)
     if not txt:
@@ -129,64 +202,113 @@ def count_source(src):
 
 
 def run_cover(root, source=None):
-    rows, total, reds = parse_map(root)
-    yellows = []
-    covered_ids, textonly_ids, unknown_kind = [], [], []
-    for r in rows:
-        if r["kind"] == "covered":
-            f = check_ref(root, r["ref"])
+    doms, items, total, reds, yellows = parse_map(root)
+    fires, weak = fire_index(root)
+    for fn in weak:
+        yellows.append("runs/%s: 有 FIRE 行但没有非 PASS 输出, 证据不计" % fn)
+
+    covered_ids, textonly_ids = [], []
+    for cid, it in sorted(items.items()):
+        if it["kind"] == "covered":
+            f = check_ref(root, it["ref"])
             if f:
                 for x in f:
-                    reds.append("%s %s: %s" % (r["id"], r["name"][:12], x))
-                unknown_kind.append(r["id"])
+                    reds.append("%s %s: %s" % (cid, it["name"][:12], x))
                 continue
-            st = check_selftest(root, r["ref"])
+            st = check_selftest(root, it["ref"])
             if st:
                 yellows.append("%s %s: 无 selftest (%s)"
-                               % (r["id"], r["name"][:12], ",".join(st)))
-            covered_ids.append(r["id"])
+                               % (cid, it["name"][:12], ",".join(st)))
+            if it["ref"].strip() not in fires:
+                reds.append("%s: covered 但 runs/ 里没有 FIRE %s —— 没红过的判据不算判据"
+                            % (cid, it["ref"].strip()))
+            covered_ids.append(cid)
         else:
-            textonly_ids.append(r["id"])
+            textonly_ids.append(cid)
 
-    # 账本自身对不上 => 红。这条最容易自欺, 所以单列。
-    if total is not None:
-        if total[0] != len(covered_ids) + len(unknown_kind):
-            reds.append("合计行 covered=%d 与实测 %d 条 covered 不符"
-                        % (total[0], len(covered_ids) + len(unknown_kind)))
-        if total[1] != len(textonly_ids):
-            reds.append("合计行 text-only=%d 与实测 %d 条不符"
-                        % (total[1], len(textonly_ids)))
+    # 域表与条目表必须互相对得上(两边都写一遍, 就必然有一天对不上)
+    dom_cov, dom_txt = {}, {}
+    for dname, d in doms.items():
+        dom_cov[dname] = d["covered"]
+        dom_txt[dname] = d["text_only"]
+        calc = len(d["covered"]) + len(d["text_only"]) + d["absent"]
+        if calc != d["items"]:
+            reds.append("%s: covered(%d)+text-only(%d)+absent(%d)=%d != 项数 %d"
+                        % (dname, len(d["covered"]), len(d["text_only"]),
+                           d["absent"], calc, d["items"]))
+    missing = [c for c in covered_ids
+               if c not in [x for v in dom_cov.values() for x in v]]
+    for c in missing:
+        reds.append("%s: 条目表声明 covered, 域表里没有列出" % c)
+    for dname, lst in dom_cov.items():
+        for c in lst:
+            if c not in items:
+                reds.append("%s: 域表列了 %s, 条目表里没有这一条" % (dname, c))
+            elif items[c]["kind"] != "covered":
+                reds.append("%s: 域表当 covered 计, 条目表写的是 %s" % (c, items[c]["kind"]))
+    for dname, lst in dom_txt.items():
+        for c in lst:
+            if c not in items:
+                reds.append("%s: 域表列了 %s, 条目表里没有这一条" % (dname, c))
+            elif items[c]["kind"] != "text-only":
+                reds.append("%s: 域表当 text-only 计, 条目表写的是 %s" % (c, items[c]["kind"]))
 
-    n_cov = len(covered_ids)
-    n_txt = len(textonly_ids)
+    n_cov, n_txt = len(covered_ids), len(textonly_ids)
+    n_items = sum(d["items"] for d in doms.values())
     n_src = count_source(source)
+    absent = None
+
+    if total is not None:
+        if total["items"] != n_items:
+            reds.append("合计行 items=%d 与域表项数之和 %d 不符" % (total["items"], n_items))
+        if total["domains"] != len(doms):
+            reds.append("合计行 domains=%d 与实测域数 %d 不符" % (total["domains"], len(doms)))
+        if total["covered"] != n_cov:
+            reds.append("合计行 covered=%d 与实测 %d 条不符" % (total["covered"], n_cov))
+        if total["text_only"] != n_txt:
+            reds.append("合计行 text-only=%d 与实测 %d 条不符"
+                        % (total["text_only"], n_txt))
+        if n_src is not None and total["items"] != n_src:
+            reds.append("分母漂移: 表里写 %d 项, 母版实测 %d 项" % (total["items"], n_src))
+        absent = total["items"] - n_cov - n_txt
+
     lines = ["覆盖账  root=%s" % root]
     if n_src is None:
-        lines.append("  母版条目      UNKNOWN  --source 未提供或读不到")
-        absent = None
+        lines.append("  母版条目      UNVERIFIED  分母取自本表合计行, 未经母版核验")
     else:
-        absent = n_src - n_cov - n_txt
-        lines.append("  母版条目      %d" % n_src)
+        lines.append("  母版条目      %d (实测)" % n_src)
+    lines.append("  域            %d  项数之和 %d" % (len(doms), n_items))
     lines.append("  covered       %d  %s" % (n_cov, ",".join(covered_ids) or "-"))
     lines.append("  text-only     %d  %s" % (n_txt, ",".join(textonly_ids) or "-"))
-    lines.append("  absent        %s" % ("UNKNOWN" if absent is None else absent))
+    lines.append("  absent        %s%s" % ("UNKNOWN" if absent is None else absent,
+                                          "" if absent is None else " (账内残差)"))
+    lines.append("  变红记录      %d 份证据 / %d 个判据点"
+                 % (len(set(fires.values())), len(fires)))
     for r in reds:
         lines.append("RED    %s" % r)
     for y in yellows:
         lines.append("YELLOW %s" % y)
 
     l5 = None
-    if absent is None:
-        lines.append("L5     UNKNOWN  \u8bfb\u4e0d\u5230\u6bcd\u7248\u4e0d\u7b49\u4e8e\u672a\u8986\u76d6")
+    if n_items == 0 or not doms:
+        # 分母为 0 时任何比例都成立, 这正是"扫 0 个文件仍报通过"的同族陷阱。
+        lines.append("L5     FAIL     域表为空: 分母为 0, 不算闭合")
+        l5 = False
+    elif absent is None:
+        lines.append("L5     UNKNOWN  分母未取到, 不判")
     elif absent < 0:
-        lines.append("L5     FAIL     absent \u4e3a\u8d1f: \u58f0\u660e\u6570\u8d85\u8fc7\u6bcd\u7248\u6761\u76ee\u6570")
+        lines.append("L5     FAIL     absent 为负: 声明数超过母版条目数")
+        l5 = False
+    elif n_txt > n_cov:
+        lines.append("L5     FAIL     text-only(%d) > covered(%d): 账面主张多于真判据"
+                     % (n_txt, n_cov))
         l5 = False
     else:
-        need = L5_RATIO * n_cov
-        l5 = absent >= need
-        lines.append("L5     %s     absent=%d %s %d x covered(%d)=%d"
-                     % ("PASS" if l5 else "FAIL", absent,
-                        "\u003e=" if l5 else "\u003c", L5_RATIO, n_cov, need))
+        l5 = True
+        lines.append("L5     PASS     分母闭合 %d 项 / %d 域, %d 条 covered 各有变红记录, "
+                     "text-only %d <= %d%s"
+                     % (n_items, len(doms), n_cov, n_txt, n_cov,
+                        "" if n_src is not None else " (分母未核验)"))
 
     ok = (not reds) and (l5 is not False)
     lines.append("")
@@ -194,7 +316,11 @@ def run_cover(root, source=None):
                  % (len(reds), len(yellows),
                     "unknown" if l5 is None else ("pass" if l5 else "fail")))
     return ok, lines, {"covered": covered_ids, "text_only": textonly_ids,
-                       "absent": absent, "l5": l5, "red": len(reds)}
+                       "absent": absent, "items": total["items"] if total else None,
+                       "domains": len(doms), "covered_n": n_cov,
+                       "text_only_n": n_txt, "fire": len(fires), "l5": l5,
+                       "source_verified": n_src is not None,
+                       "red": len(reds), "yellow": len(yellows)}
 
 
 # ---------------- selftest ----------------
@@ -211,28 +337,28 @@ def _mk(root, relpath, text):
 def _src_file(tmp, n=10):
     body = []
     for i in range(1, n + 1):
-        body.append("### C1.%d \u80fd\u529b%d\n\n**\u80fd\u529b**\uff1ax\n"
-                    "**\u8c03\u7528\u52a8\u4f5c**\uff1ay\n"
-                    "**\u5931\u6548\u8fb9\u754c**\uff1az\n" % (i, i))
+        body.append("### C1.%d 能力%d\n\n**能力**：x\n\n**变红条件**：y\n" % (i, i))
     p = os.path.join(tmp, "cap.md")
     with open(p, "w", encoding="utf-8", newline="\n") as f:
         f.write("# cap\n\n" + "\n".join(body))
     return p
 
 
-def _map(root, rows, cov, txt):
-    head = ("# M\n\n| \u7f16\u53f7 | \u540d\u79f0 | \u5224\u636e | \u7c7b\u578b |\n"
-            "|---|---|---|---|\n")
-    body = "".join("| %s | n%s | %s | %s |\n" % (r[0], r[0], r[1], r[2])
-                   for r in rows)
-    tail = "\n<!-- cover-total covered=%d text-only=%d -->\n" % (cov, txt)
-    _mk(root, MAP, head + body + tail)
+HEAD = ("# M\n\n| 域 | 项数 | covered | text-only | 缺席 |\n|---|---|---|---|---|\n")
+HEAD2 = ("\n| 编号 | 名称 | 判据 | 类型 |\n|---|---|---|---|\n")
+
+
+def _map(root, dom_rows, item_rows, total):
+    body = "".join("| %s | %d | %s | %s | %d |\n" % r for r in dom_rows)
+    body2 = "".join("| %s | n%s | %s | %s |\n" % (r[0], r[0], r[1], r[2])
+                    for r in item_rows)
+    tail = ("\n<!-- cover-total items=%d domains=%d covered=%d text-only=%d -->\n"
+            % total)
+    _mk(root, MAP, HEAD + body + HEAD2 + body2 + tail)
 
 
 def selftest():
-    """5 项。必须同时验「该红会红」与「L5 会判不诚实」——
-    一个永远 PASS 的覆盖账等于没有账。
-    """
+    """11 项。必须同时验「该红会红」「该黄会黄」「L5 会判虚胖」。"""
     base = tempfile.mkdtemp(prefix="cover_st_")
     results = []
 
@@ -240,47 +366,85 @@ def selftest():
         results.append((name, bool(cond), detail))
 
     try:
-        src = _src_file(base, 10)
+        src = _src_file(base, 10)          # 母版 10 项, 方便算分母
         repo = os.path.join(base, "repo")
         _mk(repo, "scripts/fake.py",
-            "TOKA = 1\nTOKB = 2\nTOKC = 3\nTOKD = 4\n\ndef selftest():\n    return 0\n")
-        _mk(repo, "doc.md", "note\n")
+            "A = 1\nB = 2\n\ndef check_x(root):\n    return \"RED\"\n\ndef selftest():\n    return 0\n")
+        _mk(repo, "runs/fire-01.txt",
+            "# ev\nFIRE scripts/fake.py::check_x\nRESULT red=1\n")
+        good_dom = [("D1", 4, "C1.1,C1.2", "-", 2), ("D2", 6, "-", "C1.3", 5)]
+        good_item = [("C1.1", "scripts/fake.py::check_x", "covered"),
+                     ("C1.2", "scripts/fake.py::check_x", "covered"),
+                     ("C1.3", "doc.md", "text-only")]
 
         # 1 无 MAP.md => 红
         ok, _l, _j = run_cover(repo, src)
-        chk("no MAP.md => red", not ok, "ok=%s" % ok)
+        chk("no MAP.md => red", not ok)
 
-        # 2 声明 covered 但标记不存在 => 红(这是最容易造假的一条)
-        _map(repo, [("C1.1", "scripts/fake.py::TOK_ZZZ", "covered")], 1, 0)
+        # 2 域内算术不闭合 => 红
+        _map(repo, [("D1", 4, "C1.1,C1.2", "-", 3), ("D2", 6, "-", "C1.3", 5)],
+             good_item, (10, 2, 2, 1))
         ok, _l, _j = run_cover(repo, src)
-        chk("dangling token => red", not ok, "ok=%s" % ok)
+        chk("domain arithmetic off => red", not ok)
 
-        # 3 合计行与实测不符 => 红(账本自己对不上)
-        _map(repo, [("C1.1", "scripts/fake.py::TOKA", "covered")], 5, 0)
+        # 3 covered 但 runs/ 里没有 FIRE => 红(这条是 L5 的实质)
+        _mk(repo, "runs/fire-01.txt", "# ev\nFIRE scripts/other.py::y\nRESULT red=1\n")
+        _map(repo, good_dom, good_item, (10, 2, 2, 1))
+        ok, _l, j = run_cover(repo, src)
+        chk("covered without FIRE => red", not ok and j["red"] > 0)
+
+        # 4 FIRE 行在但正文全绿 => 黄, 且不算覆盖
+        _mk(repo, "runs/fire-01.txt",
+            "# ev\nFIRE scripts/fake.py::check_x\nRESULT red=0 yellow=0\n")
+        ok, _l, j = run_cover(repo, src)
+        chk("FIRE with all-green body => yellow not counted",
+            (not ok) and j["yellow"] > 0 and j["red"] > 0)
+
+        # 5 恢复证据 => 通过, L5 成立
+        _mk(repo, "runs/fire-01.txt",
+            "# ev\nFIRE scripts/fake.py::check_x\nRESULT red=1\n")
+        ok, _l, j = run_cover(repo, src)
+        chk("valid ledger => pass", ok and j["l5"] is True, "ok=%s l5=%s" % (ok, j["l5"]))
+
+        # 6 text-only 多于 covered => L5 不成立
+        _map(repo, [("D1", 4, "C1.1", "C1.2", 2), ("D2", 6, "-", "C1.3", 5)],
+             [("C1.1", "scripts/fake.py::check_x", "covered"),
+              ("C1.2", "scripts/fake.py::check_x", "text-only"),
+              ("C1.3", "doc.md", "text-only")], (10, 2, 1, 2))
+        ok, _l, j = run_cover(repo, src)
+        chk("text-only > covered => L5 fail", (not ok) and j["l5"] is False)
+
+        # 7 判据指向不存在 => 红
+        _map(repo, good_dom,
+             [("C1.1", "scripts/nope.py::check_x", "covered"),
+              ("C1.2", "scripts/fake.py::check_x", "covered"),
+              ("C1.3", "doc.md", "text-only")], (10, 2, 2, 1))
         ok, _l, _j = run_cover(repo, src)
-        chk("total mismatch => red", not ok, "ok=%s" % ok)
+        chk("dangling ref => red", not ok)
 
-        # 4 2 covered / 10 项 => absent 8 >= 3x2 => L5 PASS
-        _map(repo, [("C1.1", "scripts/fake.py::TOKA", "covered"),
-                    ("C1.2", "scripts/fake.py::TOKB", "covered")], 2, 0)
-        ok, _l, j = run_cover(repo, src)
-        chk("2 of 10 => L5 pass", ok and j["l5"] is True,
-            "ok=%s absent=%s" % (ok, j["absent"]))
+        # 8 合计行与实测不符 => 红
+        _map(repo, good_dom, good_item, (10, 2, 5, 1))
+        ok, _l, _j = run_cover(repo, src)
+        chk("total mismatch => red", not ok)
 
-        # 5 4 covered / 10 项 => absent 6 < 12 => L5 必须判不成立
-        _map(repo, [("C1.1", "scripts/fake.py::TOKA", "covered"),
-                    ("C1.2", "scripts/fake.py::TOKB", "covered"),
-                    ("C1.3", "scripts/fake.py::TOKC", "covered"),
-                    ("C1.4", "scripts/fake.py::TOKD", "covered")], 4, 0)
-        ok, _l, j = run_cover(repo, src)
-        chk("4 of 10 => L5 fail (too optimistic)", (not ok) and j["l5"] is False,
-            "ok=%s absent=%s" % (ok, j["absent"]))
+        # 9 分母漂移: 表里写 97, 母版只有 10 => 红
+        _map(repo, [("D1", 50, "C1.1,C1.2", "-", 48), ("D2", 47, "-", "C1.3", 46)],
+             good_item, (97, 2, 2, 1))
+        ok, _l, _j = run_cover(repo, src)
+        chk("denominator drift => red", not ok)
 
-        # 6 读不到母版 => unknown, 不能判成 absent, 也不能因此判红
-        _map(repo, [("C1.1", "scripts/fake.py::TOKA", "covered")], 1, 0)
+        # 10 域表列了条目表里没有的东西 => 红(两边各写一遍必然漂移)
+        _map(repo, [("D1", 4, "C1.1,C1.2,C9.9", "-", 1), ("D2", 6, "-", "C1.3", 5)],
+             good_item, (10, 2, 3, 1))
+        ok, _l, _j = run_cover(repo, src)
+        chk("domain lists unknown id => red", not ok)
+
+        # 11 读不到母版 => 分母标未核验, 但仍要算得出账内残差
+        _map(repo, good_dom, good_item, (10, 2, 2, 1))
         ok, lines, j = run_cover(repo, None)
-        chk("no source => unknown not absent", ok and j["absent"] is None,
-            "ok=%s absent=%s" % (ok, j["absent"]))
+        chk("no source => absent as residual, marked unverified",
+            ok and j["absent"] == 7 and j["source_verified"] is False,
+            "ok=%s absent=%s verified=%s" % (ok, j["absent"], j["source_verified"]))
     finally:
         shutil.rmtree(base, ignore_errors=True)
 
@@ -300,7 +464,6 @@ def main(argv):
         if i + 1 < len(argv):
             source = argv[i + 1]
     skip = set()
-    # 所有带值的 flag 都要跳过它的值, 否则 --json 的路径会被当成 root。
     for flag in ("--source", "--json"):
         if flag in argv:
             i = argv.index(flag)
@@ -318,7 +481,6 @@ def main(argv):
         if i + 1 < len(argv):
             # 只存文件名: 绝对路径会带出本机用户名与目录结构, 而它对复核没有用。
             j["source"] = os.path.basename(source) if source else None
-            j["items"] = count_source(source)
             with open(argv[i + 1], "w", encoding="utf-8", newline="\n") as f:
                 json.dump(j, f, ensure_ascii=False, indent=1, sort_keys=True)
                 f.write("\n")

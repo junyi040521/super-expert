@@ -1,0 +1,17 @@
+# 变红记录(真实对象上跑出来的原始输出)
+FIRE scripts/cover.py::run_cover
+# 对象: oss 工作目录(没有任何覆盖声明)
+# 命令: python scripts/cover.py <dir>
+# 退出码: 1
+# 说明: 这不是声明, 是尺子在真东西上量出来的结果; 全程未做任何修图
+覆盖账  root=C:\Users\27130\WorkBuddy\2026-10-25-22-26-31\oss
+  母版条目      UNVERIFIED  分母取自本表合计行, 未经母版核验
+  域            0  项数之和 0
+  covered       0  -
+  text-only     0  -
+  absent        UNKNOWN
+  变红记录      0 份证据 / 0 个判据点
+RED    MAP.md 缺失: 没有覆盖声明, 覆盖账无从谈起
+L5     FAIL     域表为空: 分母为 0, 不算闭合
+
+RESULT red=1 yellow=0 l5=fail

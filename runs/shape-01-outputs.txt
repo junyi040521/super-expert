@@ -1,9 +1,10 @@
-# 形态判定证据
-# 命令: python scripts/shape.py <root>
-# 说明: 交付物目录(手写报告与日志, 88 文件)
+# 变红记录(真实对象上跑出来的原始输出)
+FIRE scripts/shape.py::check_a5
+# 对象: 交付物目录(88 文件, 手写报告与日志混放)
+# 命令: python scripts/shape.py <dir>
 # 退出码: 1
-
-形态判定  root=C:\Users\27130\WorkBuddy\2026-10-25-22-26-31\outputs  P=88  waivers=0
+# 说明: 这不是声明, 是尺子在真东西上量出来的结果; 全程未做任何修图
+形态判定  root=C:\Users\27130\WorkBuddy\2026-10-25-22-26-31\outputs  P=89  waivers=0
   A5 尺度无关        RED    15 处特例句
                  - reading_notes/notes_law.md:38 [chu-waizhi]
                  - reading_notes/notes_law.md:38 [chule-dou]
@@ -20,9 +21,9 @@
                  - reading_notes/_fusion_v2.txt:10455 [chu-waizhi]
                  - reading_notes/_fusion_v2.txt:12090 [chu-waizhi]
                  - reading_notes/_fusion_v2.txt:12581 [chu-waizhi]
-  A2 可归属         PASS   junk 0/88 = 0.00%
+  A2 可归属         PASS   junk 0/89 = 0.00%
   伪枢纽 r=1        PASS   0 处单子目录链
-  深度(只看)         INFO   P=88 depth=1 r=2.00 deepest_avg=5.50
+  深度(只看)         INFO   P=89 depth=1 r=2.00 deepest_avg=5.50
   -- 人工(不可自动判): A1 单参照系 / A3 优势梯度 / A4 闭合 / 硬编码坍缩
      A1 单参照系: 同名目录在跨父级重复出现时无法区分「原点漂移」与「自相似」(evidence/ x3 即后者)
      A3 优势梯度: 代码里没有「谁更优」这条信息
