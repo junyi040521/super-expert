@@ -1,0 +1,24 @@
+# 形态判定证据
+# 命令: python scripts/shape.py <root>
+# 说明: 第三方库 scipy 内置兼容层(32 文件); 拿别人的代码验我的尺子
+# 退出码: 1
+
+形态判定  root=C:\Users\27130\WorkBuddy\2026-10-27-16-18-36\.pylibs\scipy\_external\array_api_compat  P=32  waivers=0
+  A5 尺度无关        PASS   0 处特例句
+  A2 可归属         RED    junk 6/32 = 18.75%
+                 - common/_aliases.py
+                 - common/_fft.py
+                 - common/_helpers.py
+                 - common/_linalg.py
+                 - common/_typing.py
+                 - common/__init__.py
+  伪枢纽 r=1        PASS   0 处单子目录链
+  深度(只看)         INFO   P=32 depth=2 r=3.00 deepest_avg=5.00
+  -- 人工(不可自动判): A1 单参照系 / A3 优势梯度 / A4 闭合 / 硬编码坍缩
+     A1 单参照系: 同名目录在跨父级重复出现时无法区分「原点漂移」与「自相似」(evidence/ x3 即后者)
+     A3 优势梯度: 代码里没有「谁更优」这条信息
+     A4 闭合: 多个 CLI 入口常常是正确设计(三件仪器就该三个入口), 判它会惩罚对的结构
+     硬编码坍缩: 需要人声明「我做过 κ」
+
+RESULT pass=2 red=1 yellow=0 na=0 info=1
+ITEMS A5=PASS A2=RED HUB=PASS DEPTH=INFO

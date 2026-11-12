@@ -12,6 +12,7 @@
   3. 黄项必须带 文件:行，没有出处的黄不算黄，算噪声。
 """
 
+import json
 import os
 import re
 import sys
@@ -214,50 +215,157 @@ def grade_l3(root, titles):
     return failures, valid
 
 
+# ---------------- L4 / L5 ----------------
+# L4 形态判据被真实仓库打脸: shape.py 必须在 >=3 个真实仓库(P>=20 文件)上跑过,
+#    且四条判据各自至少非 PASS 过一次。与 L3「真实案例 >=3」同构 ——
+#    考的不是代码多不多, 是被真实世界打脸过几次。
+# L5 覆盖诚实: cover.py 的账必须成立(absent >= 3 x covered)。
+#
+# 缺证据时输出 UNKNOWN, 不输出 FAIL:
+#   「判据没被执行过」和「判据不成立」是两件事, 混在一起会让人以为改代码能解决。
+# 也正因为如此, super-expert 要求 L4/L5 都真正 PASS —— 缺证据不算过。
+
+GRADE_L4_RUNS = 3
+GRADE_L4_MIN_P = 20
+# 深度检查已降为 INFO(恒 N/A 或恒红都不算判据), 所以 L4 只要求三条各红一次。
+L4_ITEMS = ("A5", "A2", "HUB")
+
+
+def grade_l4(root):
+    """返回 (failures, used_count, unknown)。证据 = runs/shape-*.txt。"""
+    d = os.path.join(root, "runs")
+    if not os.path.isdir(d):
+        return ["runs/ 不存在: 形态判据没有在任何真实仓库上跑过(未知, 不是失败)"], 0, True
+    names = sorted(f for f in os.listdir(d)
+                   if f.startswith("shape-") and f.endswith(".txt"))
+    if not names:
+        return ["runs/ 里没有 shape-*.txt 证据"], 0, True
+    hit, used = {}, []
+    for fn in names:
+        txt = read_text(os.path.join(d, fn)) or ""
+        m = re.search(r"P=(\d+)", txt)
+        p = int(m.group(1)) if m else 0
+        if p < GRADE_L4_MIN_P:
+            continue
+        im = re.search(r"(?m)^ITEMS (.+)$", txt)
+        if not im:
+            continue
+        used.append("%s(P=%d)" % (fn, p))
+        for kv in im.group(1).split():
+            if "=" not in kv:
+                continue
+            k, v = kv.split("=", 1)
+            if v in ("RED", "YELLOW"):
+                hit[k] = hit.get(k, 0) + 1
+    fails = []
+    if len(used) < GRADE_L4_RUNS:
+        fails.append("有效证据 %d 个, 不足 %d 个(须 P>=%d)"
+                     % (len(used), GRADE_L4_RUNS, GRADE_L4_MIN_P))
+    cold = [k for k in L4_ITEMS if k not in hit]
+    if cold:
+        fails.append("从未非 PASS 的判据: %s —— 从未红过的判据不是判据"
+                     % ",".join(cold))
+    return fails, len(used), False
+
+
+def grade_l5(root):
+    """返回 (failures, ok, unknown)。证据 = runs/cover-*.json。"""
+    d = os.path.join(root, "runs")
+    if not os.path.isdir(d):
+        return ["runs/ 不存在: 覆盖账没有算过(未知, 不是失败)"], False, True
+    rec, fn = None, ""
+    for name in sorted(os.listdir(d)):
+        if not (name.startswith("cover-") and name.endswith(".json")):
+            continue
+        txt = read_text(os.path.join(d, name))
+        if not txt:
+            continue
+        try:
+            r = json.loads(txt)
+        except ValueError:
+            continue
+        if r.get("items") is None:
+            continue
+        rec, fn = r, name
+    if rec is None:
+        return ["runs/ 里没有带母版分母的 cover 记录"], False, True
+    cov = len(rec.get("covered") or [])
+    if rec.get("l5") is True:
+        return [], True, False
+    if rec.get("l5") is False:
+        return ["%s: L5 不成立, absent=%s 与 covered=%d 的比例过于乐观"
+                % (fn, rec.get("absent"), cov)], False, False
+    return ["%s: L5 为 unknown, 分母未取到" % fn], False, True
+
+
 def run_grade(root):
-    """返回 (等级是否达标, 输出行)。"""
+    """返回 (全体是否达标, 输出行, 逐级结果)。"""
     lines = ["等级判定"]
     titles = method_titles(root)
+    lv = {}
 
     # L1
     red1, _ = check_criteria(root)
-    l1 = not red1
+    lv["L1"] = not red1
     lines.append("  L1 判据完备        %s  %s"
-                 % ("PASS" if l1 else "FAIL",
-                    "%d 条判据都带变红条件" % len(titles) if l1
+                 % ("PASS" if lv["L1"] else "FAIL",
+                    "%d 条判据都带变红条件" % len(titles) if lv["L1"]
                     else "; ".join(red1[:3])))
 
     # L2
     fals = os.path.join(root, "scripts", "falsify.py")
     if not os.path.exists(fals):
-        l2, l2msg = False, "scripts/falsify.py 不存在"
+        lv["L2"], l2msg = False, "scripts/falsify.py 不存在"
     else:
         try:
             r = subprocess.run([sys.executable, fals, "--selftest"],
                                capture_output=True, timeout=90)
-            l2 = (r.returncode == 0)
+            lv["L2"] = (r.returncode == 0)
             tail = (r.stdout or b"").decode("utf-8", "replace").strip().splitlines()
-            l2msg = (tail[-1] if tail else "") if l2 else "falsify --selftest 非零退出"
+            l2msg = (tail[-1] if tail else "") if lv["L2"] else "falsify --selftest 非零退出"
         except Exception as e:            # noqa: BLE001
-            l2, l2msg = False, "falsify --selftest 无法执行: %s" % e
+            lv["L2"], l2msg = False, "falsify --selftest 无法执行: %s" % e
     lines.append("  L2 判据可被证伪    %s  %s"
-                 % ("PASS" if l2 else "FAIL", l2msg))
+                 % ("PASS" if lv["L2"] else "FAIL", l2msg))
 
     # L3
     f3, count = grade_l3(root, titles)
-    l3 = not f3
+    lv["L3"] = not f3
     lines.append("  L3 真实案例 >= %-2d   %s  %s"
-                 % (GRADE_MIN_CASES, "PASS" if l3 else "FAIL",
-                    "%d 个案例,四段齐全,判据可对上" % count if l3
+                 % (GRADE_MIN_CASES, "PASS" if lv["L3"] else "FAIL",
+                    "%d 个案例,四段齐全,判据可对上" % count if lv["L3"]
                     else "; ".join(f3[:3])))
     for extra in f3[3:]:
         lines.append("                      %s" % extra)
 
-    ok = l1 and l2 and l3
+    # L4
+    f4, n4, u4 = grade_l4(root)
+    lv["L4"] = (not f4) if not u4 else False
+    tag4 = "UNKNOWN" if (u4 and not f4) else ("PASS" if not f4 else "FAIL")
+    lines.append("  L4 形态被判据打脸  %-7s %s"
+                 % (tag4, "%d 个真仓证据, %d 条判据都红过"
+                    % (n4, len(L4_ITEMS)) if not f4
+                    else "; ".join(f4[:2])))
+
+    # L5
+    f5, ok5, u5 = grade_l5(root)
+    lv["L5"] = ok5
+    tag5 = "UNKNOWN" if (u5 and not ok5) else ("PASS" if ok5 else "FAIL")
+    lines.append("  L5 覆盖诚实        %-7s %s"
+                 % (tag5, "absent >= 3 x covered" if ok5
+                    else "; ".join(f5[:2])))
+
+    ok = all(lv.get(k) for k in ("L1", "L2", "L3", "L4", "L5"))
+    l3ok = all(lv.get(k) for k in ("L1", "L2", "L3"))
     lines.append("")
-    lines.append("GRADE  %s" % ("super-expert (超级专家级)" if ok
-                                else "not-yet (未达超级专家级)"))
-    return ok, lines
+    if ok:
+        name = "super-expert (超级专家级)"
+    elif l3ok:
+        name = "expert (专家级 · L4/L5 未过, 缺证据或缺诚实)"
+    else:
+        name = "not-yet (未达专家级)"
+    lines.append("GRADE  %s" % name)
+    return ok, lines, lv
 
 
 CHECKS = [
@@ -375,30 +483,70 @@ def selftest():
 
         _mk_case(gd, "001-a")
         _mk_case(gd, "002-b")
-        ok2, _ = run_grade(gd)
-        chk("grade: only 2 cases => not-yet", not ok2, "ok=%s" % ok2)
+        _ok2, _l2, lv2 = run_grade(gd)
+        chk("grade: only 2 cases => L3 fail", not lv2["L3"], "L3=%s" % lv2["L3"])
 
         _mk_case(gd, "003-c")
-        ok3, _ = run_grade(gd)
-        chk("grade: 3 complete cases => super", ok3, "ok=%s" % ok3)
+        ok3, _l3, lv3 = run_grade(gd)
+        chk("grade: 3 complete cases => L3 pass", lv3["L3"], "L3=%s" % lv3["L3"])
+        # 关键: L3 过了但缺 L4/L5 证据, 整体必须是 expert 而不是 super。
+        # 这一条就是「诚实降级」的判据 —— 没有它, 只要 L3 绿就自动发超级称号。
+        chk("grade: L3 only => not super (honest downgrade)", not ok3,
+            "ok=%s" % ok3)
 
         _mk_case(gd, "003-c", drop="修法")
-        ok4, _ = run_grade(gd)
-        chk("grade: missing section => not-yet", not ok4, "ok=%s" % ok4)
+        _ok4, _l4, lv4 = run_grade(gd)
+        chk("grade: missing section => L3 fail", not lv4["L3"], "L3=%s" % lv4["L3"])
 
         _mk_case(gd, "003-c", crit="十 · 根本不存在")
-        ok5, _ = run_grade(gd)
-        chk("grade: dangling criterion => not-yet", not ok5, "ok=%s" % ok5)
+        _ok5, _l5, lv5 = run_grade(gd)
+        chk("grade: dangling criterion => L3 fail", not lv5["L3"], "L3=%s" % lv5["L3"])
 
         _mk_case(gd, "003-c")
         os.remove(os.path.join(gd, "cases", "003-c", "evidence", "raw.txt"))
-        ok6, _ = run_grade(gd)
-        chk("grade: empty evidence => not-yet", not ok6, "ok=%s" % ok6)
+        _ok6, _l6, lv6 = run_grade(gd)
+        chk("grade: empty evidence => L3 fail", not lv6["L3"], "L3=%s" % lv6["L3"])
 
         _mk_case(gd, "003-c")
         _mk(gd, "scripts/falsify.py", "import sys\nsys.exit(1)\n")
-        ok7, _ = run_grade(gd)
-        chk("grade: falsify red => not-yet", not ok7, "ok=%s" % ok7)
+        _ok7, _l7, lv7 = run_grade(gd)
+        chk("grade: falsify red => L2 fail", not lv7["L2"], "L2=%s" % lv7["L2"])
+
+        # ---- L4 / L5: 缺证据不许算过, 有证据必须能过 ----
+        # 只验「会判不过」等于没验: 一个永远 UNKNOWN 的判定器同样会过前几条。
+        _mk(gd, "scripts/falsify.py", "import sys\nsys.exit(0)\n")
+
+        def _run_shape_ev(name, p, items):
+            _mk(gd, "runs/" + name, "x P=%d\nITEMS %s\n" % (p, items))
+
+        ok8, _l8, _lv8 = run_grade(gd)
+        chk("grade: no runs => not super", not ok8, "ok=%s" % ok8)
+
+        for i in (1, 2, 3):
+            _run_shape_ev("shape-%02d-a.txt" % i, 30,
+                          "A5=RED A2=RED HUB=YELLOW DEPTH=RED")
+        _mk(gd, "runs/cover-01-a.json",
+            '{"covered": ["C1.1"], "absent": 90, "l5": true, "items": 97}')
+        ok9, _l9, lv9 = run_grade(gd)
+        chk("grade: 3 shape + 1 cover => super", ok9,
+            "ok=%s L4=%s L5=%s" % (ok9, lv9["L4"], lv9["L5"]))
+
+        os.remove(os.path.join(gd, "runs", "shape-03-a.txt"))
+        ok10, _l10, _lv10 = run_grade(gd)
+        chk("grade: 2 runs < 3 => not super", not ok10, "ok=%s" % ok10)
+
+        for i in (1, 2, 3):
+            _run_shape_ev("shape-%02d-a.txt" % i, 30,
+                          "A5=PASS A2=RED HUB=YELLOW DEPTH=RED")
+        ok11, _l11, lv11 = run_grade(gd)
+        chk("grade: one item never red => not super", not ok11,
+            "L4=%s" % lv11["L4"])
+
+        _mk(gd, "runs/cover-01-a.json",
+            '{"covered": ["C1.1", "C1.2", "C1.3", "C1.4"], "absent": 6,'
+            ' "l5": false, "items": 10}')
+        ok12, _l12, lv12 = run_grade(gd)
+        chk("grade: optimistic cover => not super", not ok12, "L5=%s" % lv12["L5"])
     finally:
         shutil.rmtree(base, ignore_errors=True)
 
@@ -418,9 +566,15 @@ def main(argv):
     if not os.path.isdir(root):
         print("not a dir: %s" % root)
         return 2
-    if "--grade" in argv:
-        ok, lines = run_grade(root)
+    if "--grade" in argv or "--grade-l3" in argv:
+        ok, lines, lv = run_grade(root)
         print("\n".join(lines))
+        if "--grade-l3" in argv:
+            # CI 用这个: 只判仓库内可独立验证的 L1-L3。
+            # L4/L5 需要外部证据(真实仓库样本、母版分母), 缺它们是 UNKNOWN 而不是红,
+            # 让 CI 因为「没有私有文件」变红, 会训练所有人忽略红。
+            ok = all(lv.get(k) for k in ("L1", "L2", "L3"))
+            print("SCOPE  L1-L3 only (完整等级请跑 --grade)")
         return 0 if ok else 1
     red, _yellow, lines = run(root)
     print("\n".join(lines))

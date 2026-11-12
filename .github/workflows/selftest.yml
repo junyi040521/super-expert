@@ -27,19 +27,31 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
 
-      - name: 三件仪器自测（任一非零即失败）
+      - name: 五件仪器自测（任一非零即失败）
         run: |
           python scripts/gate.py --selftest
           python scripts/pack_det.py --selftest
           python scripts/falsify.py --selftest
+          python scripts/shape.py --selftest
+          python scripts/cover.py --selftest
 
       - name: 闸门扫本仓库（应为 0 红）
         run: python scripts/gate.py .
 
-      - name: 等级判定（不足超级专家级即失败）
-        # 这一条把「超级专家」这个名字挂到可数条件上：
-        # 判据完备 + 可被证伪 + 真实案例 >= 3，缺一级就红。
-        run: python scripts/gate.py --grade .
+      - name: 形态判定（本仓库应 0 红，N/A 允许）
+        run: python scripts/shape.py .
+
+      - name: 覆盖账（无母版时应为 unknown，不是 absent）
+        # 公开仓库里没有母版清单。这一条验的是「读不到时不撒谎」：
+        # 必须输出 UNKNOWN 且退出 0。如果哪天它把 unknown 判成 absent 而失败，
+        # 说明有人的"修复"把诚实报告变成了惩罚。
+        run: python scripts/cover.py .
+
+      - name: 等级判定 L1-L3（这两级必须现场可验）
+        # CI 只判仓库内可独立验证的三级。L4/L5 需要外部证据（真实目录样本、
+        # 母版分母），缺证据是 UNKNOWN 不是红 —— 让 CI 因为「没有私有文件」
+        # 变红，会训练所有人忽略红。完整等级见本地 `--grade`。
+        run: python scripts/gate.py --grade-l3 .
 
   py38-syntax-guard:
     # 兜底：即使某天 3.8 的 runner 彻底下架，这条仍能守住「3.8 兼容」的声明。

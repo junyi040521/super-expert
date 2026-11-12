@@ -1,0 +1,32 @@
+# 形态判定证据
+# 命令: python scripts/shape.py <root>
+# 说明: 插件市场目录(383 文件, 含多个安装包)
+# 退出码: 1
+
+形态判定  root=C:\Users\27130\.workbuddy\plugins\marketplaces\my-experts  P=383  waivers=0
+  A5 尺度无关        RED    13 处特例句
+                 - plugins/junyi/THIRD-PARTY.md:92 [chu-waizhi]
+                 - plugins/junyi/agents/junyi.md:146 [chu-waizhi]
+                 - plugins/junyi/agents/junyi.md:146 [chule-dou]
+                 - plugins/junyi/skills/architect-mindset/SKILL.md:512 [chu-waizhi]
+                 - plugins/junyi/skills/architect-mindset/SKILL.md:512 [chule-dou]
+                 - plugins/junyi/skills/architect-mindset/references/adversarial-review.md:35 [chu-waizhi]
+                 - plugins/junyi/skills/architect-mindset/references/change-shape.md:93 [chule-dou]
+                 - plugins/junyi/skills/architect-mindset/references/circle-dot-law.md:61 [chu-waizhi]
+                 - plugins/junyi/skills/architect-mindset/references/circle-dot-law.md:61 [chule-dou]
+                 - plugins/junyi/skills/architect-mindset/references/circle-dot-law.md:182 [chu-waizhi]
+                 - plugins/junyi/skills/skyline/references/components/references/media/text.md:319 [chule-dou]
+                 - plugins/junyi/skills/wechat-miniprogram/references/framework.md:103 [chu-waizhi]
+                 - plugins/junyi/skills/wechat-miniprogram/references/framework.md:3856 [chu-waizhi]
+  A2 可归属         PASS   junk 0/383 = 0.00%
+  伪枢纽 r=1        YELLOW 1 处单子目录链
+                 - plugins/credit-saver-pro/skills/credit-saver
+  深度(只看)         INFO   P=383 depth=8 r=2.52 deepest_avg=2.00
+  -- 人工(不可自动判): A1 单参照系 / A3 优势梯度 / A4 闭合 / 硬编码坍缩
+     A1 单参照系: 同名目录在跨父级重复出现时无法区分「原点漂移」与「自相似」(evidence/ x3 即后者)
+     A3 优势梯度: 代码里没有「谁更优」这条信息
+     A4 闭合: 多个 CLI 入口常常是正确设计(三件仪器就该三个入口), 判它会惩罚对的结构
+     硬编码坍缩: 需要人声明「我做过 κ」
+
+RESULT pass=1 red=1 yellow=1 na=0 info=1
+ITEMS A5=RED A2=PASS HUB=YELLOW DEPTH=INFO
